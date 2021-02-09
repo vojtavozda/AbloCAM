@@ -1,6 +1,8 @@
 """
 AbloCAM
 =======
+
+just some edit
 """
 
 
@@ -41,6 +43,7 @@ import xeryon
 
 class GoogleDocExample():
     """This is an example of a module level function.
+    edit number 2
 
     Function parameters should be documented in the ``Args`` section. The name
     of each parameter is required. The type and description of each parameter
@@ -90,7 +93,7 @@ class GoogleDocExample():
     """
 
     def meth(self):
-        pass
+        print("edit no. 3")
 
 class MicGUI(QWidget):
 
