@@ -11,6 +11,18 @@ This is test number X4
 .. automodule:: AbloMIC
    :members:
 
+Text after AbloMIC
+
+.. automodule:: icons
+   :members:
+
+Text after icons
+
+.. automodule:: basler
+   :members:
+
+Text after basler
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
