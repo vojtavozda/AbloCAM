@@ -6,6 +6,9 @@
 AbloCAM documentation
 =====================
 
+.. automodule:: AbloMIC
+   :members:
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:

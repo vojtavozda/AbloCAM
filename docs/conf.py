@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.abspath('..'))
 sys.path.append('/home/vovo/FZU/experimenty/AbloCAM/Xeryon/scripts/')
 sys.path.append('../../xeryon_library')
 
+# autodoc_mock_imports = ['numpy','basler','PyQt5','qtawesome']
 
 # -- Project information -----------------------------------------------------
 
