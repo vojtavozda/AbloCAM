@@ -1,9 +1,14 @@
 #!/usr/bin/python3
 
-""" Basler module """
+"""
+Basler camera
+=============
 
-# TODO =========================================================================
-# - add functionality (connect camera)
+Self-standing module for full control of **Basler camera** employing ``pypylon``
+(see its `github page <https://github.com/basler/pypylon>`_ for further usage).
+
+"""
+
 
 import sys
 import time
@@ -234,6 +239,23 @@ class BaslerView(QWidget):
             self.closeSignal.emit()
 
 class Thread(QThread):
+    """
+    **Bases:** :class:`QThread`
+
+    Object used to grab images from the **Basler** camera. It is optimized to be
+    run in a separate thread. After successfull grabbing signal :attr:`~newImg`
+    emits the image.
+
+    Args:
+        basler (:class:`Basler`): Pointer to camera instance
+        sigStop (:class:`pyqtSignal`): Signal used to stop streaming (exit while loop)
+        sigPause (:class:`pyqtSignal`): Signal used to pause streaming (do not exit while
+            loop but stop grabbing)
+
+    Attributes:
+        newImg (:class:`pyqtSignal`): Emits :class:`np.ndarray` after successfull
+            grabbing. 
+    """
     newImg = pyqtSignal(np.ndarray)
 
     def __init__(self,*args,basler=None,sigStop=None,sigPause=None):
@@ -252,6 +274,8 @@ class Thread(QThread):
         self.streaming = False
 
     def run(self):
+        """ Reimplementation of :func:`~run`. It grabs images calling
+        :func:`~Basler.grabImg` and emits :attr:`~newImg`. """
         while self.streaming:
             if not self.pause:
                 img = self.Basler.grabImg()
@@ -259,16 +283,39 @@ class Thread(QThread):
                     self.newImg.emit(img)
 
 class BaslerGUI(QWidget):
-
     """
+    **Bases:** :class:`QWidget`
+
     This widget contains controls of the Basler camera and can be placed to any
-    QMainWindow, QFrame, etc.
+    :class:`QMainWindow`, :class:`QFrame`, etc.
 
-    Grabbing of image and displaying it is done within a separate thread.
+    **Threading:**
 
-    Flow of the application is limitted only by speed of plotting which must be
-    done in the main thread. See also
-    https://groups.google.com/g/pyqtgraph/c/FSjIaxYfYKQ for possible speed up.
+    PyQt5 does not support interference to the GUI from any other but the `main`
+    thread. Therefore, video (grab&display) cannot fully run in a separate
+    thread. Instead, signal from the separate thread emits pointer to grabbed
+    image which is then displayed in the `main` thread.
+
+    Flow of the application is limitted only by the speed of plotting which
+    **must** be done in the main thread. See also `this
+    <https://groups.google.com/g/pyqtgraph/c/FSjIaxYfYKQ>`_ for possible speed
+    up.
+
+    Args:
+        parentCloseSignal (:class:`pyqtSignal`,optional): This signal is connected to
+            :func:`~parrentClose`. Defaults to None.
+        messageSignal (:class:`pyqtSignal`,optional): Handle of signal which is connected to
+            :func:`~BaslerMainWindow.messageCallback` so any message emitted by this
+            signal can be shown in the statusbar. Defaults to None.
+
+    Attributes:
+        viewWindow: Instance of :class:`BaslerView`. This is a separate window
+            which shows grabbed images.
+
+    **Steps:**
+
+        1. Init Basler camera (:class:`Basler`)
+        2. Create GUI (buttons etc.)
     """
 
     def __init__(self,parentCloseSignal=None,messageSignal=None):
@@ -278,7 +325,7 @@ class BaslerGUI(QWidget):
         self.layout = None
 
         if parentCloseSignal is not None:
-            parentCloseSignal.connect(self.parentClose)
+            parentCloseSignal.connect(self.__parentClose)
 
         self.messageSignal = messageSignal
 
@@ -291,7 +338,7 @@ class BaslerGUI(QWidget):
         self.Basler = Basler(
             connectionSignal=self.signals.connection,
             messageSignal= self.messageSignal)
-        self.signals.connection.connect(self.toggleConnection)
+        self.signals.connection.connect(self.__toggleConnection)
 
         # Buttons --------------------------------------------------------------
         self.btnConnect = QPushButton('Connect',self)
@@ -314,11 +361,11 @@ class BaslerGUI(QWidget):
         self.btnStream.setCursor(Qt.PointingHandCursor)
         self.btnSaveImg.setCursor(Qt.PointingHandCursor)
 
-        self.toggle_btnStream()
+        self.__toggle_btnStream()
         self.btnGrabImg.setIcon(qta.icon('fa.photo'))
-        self.btnGrabImg.clicked.connect(self.btnClicked)
+        self.btnGrabImg.clicked.connect(self.__btnClicked)
         self.btnSaveImg.setIcon(al.standardIcon('SP_DriveFDIcon'))
-        self.btnSaveImg.clicked.connect(self.btnClicked)
+        self.btnSaveImg.clicked.connect(self.__btnClicked)
 
         # Exposure settings ----------------------------------------------------
         # Add label
@@ -330,7 +377,7 @@ class BaslerGUI(QWidget):
         self.sldExp.setCursor(Qt.PointingHandCursor)
         self.sldExp.setValue(self.Basler.exposureT.get())
         self.sldExp.setToolTip('Change exposure time')
-        self.sldExp.valueChanged.connect(self.sldExpValueChanged)
+        self.sldExp.valueChanged.connect(self.__sldExpValueChanged)
         self.sldExp.setMinimum(0)
         self.sldExp.setMaximum(100)
 
@@ -344,7 +391,7 @@ class BaslerGUI(QWidget):
         self.sldRes.setCursor(Qt.PointingHandCursor)
         self.sldRes.setValue(self.Basler.resolution.get())
         self.sldRes.setToolTip('Change resolution')
-        self.sldRes.valueChanged.connect(self.sldResValueChanged)
+        self.sldRes.valueChanged.connect(self.__sldResValueChanged)
         self.sldRes.setMinimum(0)
         self.sldRes.setMaximum(100)
 
@@ -375,14 +422,14 @@ class BaslerGUI(QWidget):
 
         self.setLayout(self.layout)
 
-        self.viewWindow = self.newViewWindow()
-        self.signals.closeWindow.connect(self.viewWindowClosed)
+        self.viewWindow = self.__newViewWindow()
+        self.signals.closeWindow.connect(self.__viewWindowClosed)
         
         # Set states of buttons according to connection state of the camera
-        self.toggleConnection(self.Basler.connected)
+        self.__toggleConnection(self.Basler.connected)
 
-    def newViewWindow(self):
-        """ Create new viewWindow """
+    def __newViewWindow(self):
+        """ Init new :attr:`~viewWindow` of :class:`BaslerView` class. """
         viewWindow = BaslerView(closeSignal=self.signals.closeWindow)
         # This window has to be shown and then potentially hidden. Error with
         # timers and different threads is otherwise given.
@@ -390,21 +437,21 @@ class BaslerGUI(QWidget):
         viewWindow.hide()
         return viewWindow
 
-    def btnClicked(self):
-        """ Callback for buttons """
+    def __btnClicked(self):
+        """ Callback connected to buttons """
         sender = self.sender()
         if sender.objectName() == 'btn_grab':
             self.showImg()
         elif sender.objectName() == 'btn_save':
             self.saveImg()
 
-    def sldExpValueChanged(self,value):
+    def __sldExpValueChanged(self,value):
         # TODO: Need to map value from slider limits to camera limits:
         # $ print(self.cam.ExposureTime.Min)
         # $ print(self.cam.ExposureTime.Max)
         pass
 
-    def sldResValueChanged(self,value):
+    def __sldResValueChanged(self,value):
         """ Set new resolution if slider sldRes moved by user """
         if self.sldRes.hasFocus():
             if self.streaming:
@@ -417,7 +464,7 @@ class BaslerGUI(QWidget):
             if self.streaming:
                 self.signals.sig2.emit()    # Continue streaming
 
-    def toggleConnection(self,connection):
+    def __toggleConnection(self,connection):
         """ Change appearance of widgets according to connection status """
         if connection:
             self.btnConnect.setText('Disconnect')
@@ -439,7 +486,7 @@ class BaslerGUI(QWidget):
         self.btnSaveImg.setEnabled(connection)
         self.sldRes.setEnabled(connection)
 
-    def toggle_btnStream(self):
+    def __toggle_btnStream(self):
         """ Change functionality of btnStream """
         if self.streaming:
             self.btnStream.setText('Stop')
@@ -457,10 +504,14 @@ class BaslerGUI(QWidget):
             self.btnGrabImg.setEnabled(True)
 
     def startStream(self):
+        """ Start streaming. This function opens separate window
+        :attr:`~viewWindow` (if not opened yet) and starts new thread
+        :class:`Thread` which signal :attr:`~Thread.newImg` is connected to
+        :func:`~setImage`. """
 
         if not self.streaming:
             self.streaming = True
-            self.toggle_btnStream()
+            self.__toggle_btnStream()
 
             if not self.viewWindow.isVisible():
                 self.viewWindow.show()
@@ -474,6 +525,9 @@ class BaslerGUI(QWidget):
 
     @pyqtSlot(np.ndarray)
     def setImage(self,image):
+        """ Function is connected to :attr:`~Thread.newImg` which emits when the
+        :class:`Thread` grabs new image. This function also calculates `fps`
+        which is displayed as a title of the :attr:`~viewWindow`. """
         nowT = pg.ptime.time()
         dt = nowT - self.lastT
         self.lastT = nowT
@@ -487,15 +541,18 @@ class BaslerGUI(QWidget):
         self.viewWindow.img.setImage(image)
 
     def stopStream(self):
+        """ Stop streaming. :attr:`~signals_sig1` emits so :class:`Thread` knows
+        it should stop grabbing. """
         if self.streaming:
             self.streaming = False
             self.signals.sig1.emit()
-            self.toggle_btnStream()
+            self.__toggle_btnStream()
             al.emitMsg(self.messageSignal,'Streaming stopped')
 
     def showImg(self):
-        """ Show image in separate window
-        - called, e.g., by `btnGrabImg` or by `stream()` in a separate thread
+        """ Show image in the :attr:`~viewWindow`.
+        Called, e.g., by `btnGrabImg` or by :func:`~stream` in a separate
+        thread.
         """
         # First, show window if not visible
         if not self.viewWindow.isVisible():
@@ -513,26 +570,26 @@ class BaslerGUI(QWidget):
         if self.streaming:
             self.signals.sig2.emit()    # Continue streaming
 
-    def viewWindowClosed(self):
+    def __viewWindowClosed(self):
         """ Stop streaming when closing view window """
         self.stopStream()
 
-    def parentClose(self):
-        print('BaslerGUI::parentClose')
+    def __parentClose(self):
+        print('BaslerGUI::__parentClose')
         self.stopStream()
         self.viewWindow.hide()
         self.Basler.disconnect()
 
 class BaslerMainWindow(QMainWindow):
+    """
+    **Bases:** :class:`QMainWindow`
 
-    """ Main window which encapsulates Basler GUI """
+    Main window which sets :class:`BaslerGUI` as the central widget. It uses
+    statusbar and signals :class:`ablolib.Signals` in a similar way as
+    :class:`AbloMIC.MicMainWindow` does. """
 
     def __init__(self):
         super().__init__()
-
-        self.initUI()
-
-    def initUI(self):
 
         self.setGeometry(100,100,300,300)
         self.setWindowTitle("Basler GUI")
@@ -550,16 +607,24 @@ class BaslerMainWindow(QMainWindow):
         self.show()
 
     def statusbarShow(self,msg):
+        """ Function connected to :attr:`~signals_message` to display ``msg`` in
+        the statusbar. """
         self.statusbar.showMessage(msg)
 
     def closeEvent(self,*_):
+        """ Reimplementation of `closeEvent` function so
+        :attr:`~signals_closeParent` can emit when this main window is closed.
+        """
         self.signals.closeParent.emit()
 
 def main():
+    """ Function used for standalone execution. It opens main window
+    :class:`BaslerMainWindow` and ensures clean exit.
+    """
     app = QApplication(sys.argv)
     handle = BaslerMainWindow()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
-
+    """ Run `main()` for standalone execution. """
     main()

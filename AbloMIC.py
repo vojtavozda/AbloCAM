@@ -1,9 +1,16 @@
 """
-AbloCAM
+AbloMIC
 =======
 
-just some edit
-signed?
+Module used to build GUI for microscope control. Optimized for executing as
+`main` file (see :func:`~main`). It opens main window (:class:`MicMainWindow`)
+which contains :class:`MicGUI` as a central widget which encapsulates all other
+widgets imported from different modules. The application is built on ``PyQt5``.
+
+The microscope employs **Xeryon** and **Navitar** motors for precise movements
+and **Basler** camera for grabbing pictures and video.
+
+
 """
 
 
@@ -42,61 +49,33 @@ import qtawesome as qta
 import ablolib as al
 import xeryon
 
-class GoogleDocExample():
-    """This is an example of a module level function.
-    edit number 2
+class MicGUI(QWidget):
+    """ 
+    **Bases:** :class:`QWidget`
 
-    Function parameters should be documented in the ``Args`` section. The name
-    of each parameter is required. The type and description of each parameter
-    is optional, but should be included if not obvious.
+    GUI which is set as the central widget of :class:`MicMainWindow`. It inits
+    all devices (**Basler**, **Navitar**, **Xeryon**), imports appropriate
+    widgets and puts it together.
 
-    If \*args or \*\*kwargs are accepted,
-    they should be listed as ``*args`` and ``**kwargs``.
+    Attributes:
+        basler: Instance of :class:`basler.BaslerGUI` which inits and controls
+            Basler camera.
+        motorX: Instance of :class:`xeryon.Motor`
+        motorY: Instance of :class:`xeryon.Motor`
+        motorR: Instance of :class:`xeryon.Motor`
+        motorZ: Instance of :class:`xeryon.Motor`
 
-    The format for a parameter is::
-
-        name (type): description
-            The description may span multiple lines. Following
-            lines should be indented. The "(type)" is optional.
-
-            Multiple paragraphs are supported in parameter
-            descriptions.
+        xystage: Widget of :class:`xeryon.XYWidget`
 
     Args:
-        param1 (int): The first parameter.
-        param2 (:obj:`str`, optional): The second parameter. Defaults to None.
-            Second line of description should be indented.
-        *args: Variable length argument list.
-        **kwargs: Arbitrary keyword arguments.
-
-    Returns:
-        bool: True if successful, False otherwise.
-
-        The return type is optional and may be specified at the beginning of
-        the ``Returns`` section followed by a colon.
-
-        The ``Returns`` section may span multiple lines and paragraphs.
-        Following lines should be indented to match the first line.
-
-        The ``Returns`` section supports any reStructuredText formatting,
-        including literal blocks::
-
-            {
-                'param1': param1,
-                'param2': param2
-            }
-    Muhaha!
-    Raises:
-        AttributeError: The ``Raises`` section is a list of all exceptions
-            that are relevant to the interface.
-        ValueError: If `param2` is equal to `param1`.
+        parentCloseSignal (:class:`pyqtSignal`): Handle of this signal is
+            forwarded to other widgets and motor instances so clean exit is ensured
+            when :class:`MicMainWindow` is closed. Defaults to None.
+        messageSignal (:class:`pyqtSignal`): Handle of signal which is connected
+            to :func:`~MicMainWindow.messageCallback` so any message emitted by this
+            signal can be shown in the statusbar. Defaults to None.
 
     """
-
-    def meth(self):
-        print("edit no. 3")
-
-class MicGUI(QWidget):
 
     def __init__(self,parentCloseSignal=None,messageSignal=None):
         super().__init__()
@@ -198,20 +177,35 @@ class MicGUI(QWidget):
         print("MicGUI::closeEvent")
 
 class MicMainWindow(QMainWindow):
-    """
-    MicMainWindow
-    =============
+    """ 
+    **Bases:** :class:`QMainWindow`
 
-    Main window for microscope control
+    Main window for microscope control. It is useful for initialization of
+    `menubar` and `statusbar` which are not parts of :class:`QWidget`.
+    Reimplementation of :func:`~eventFilter` also makes catching of all key
+    presses possible.
+
+    Attributes:
+        signals_message: Connected to :func:`~messageCallback` to show
+            message emitted by childrens. In order to show a message in the
+            `statusbar` just forward pointer of this signal as an argument to a
+            custom function end `emit` message as `mySignal.emit("my message")`.
+        signals_closeParent: This signal emits when this main window is closed.
+            Connect it to custom function which closes other windows, disconnects
+            motors, etc.
 
     """
 
     def __init__(self):
+        """
+        **Steps:**
+
+            - set window position, title, etc.
+            - set central widget :class:`MicGUI`
+            - init `statusbar` and `menubar`
+        """
+
         super().__init__()
-
-        self.initUI()
-
-    def initUI(self):
 
         self.setGeometry(0,0,400,1000)
 
@@ -274,6 +268,9 @@ class MicMainWindow(QMainWindow):
 
 
     def eventFilter(self,source,event):
+        """ Reimplementation of `eventFilter` makes possible to catch all key
+        presses. Specifically, it is important to catch ``ESC`` and set focus to
+        widget which handles key navigation. """
         if event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Escape:
                 self.micGUI.xystage.setFocus()
@@ -281,22 +278,46 @@ class MicMainWindow(QMainWindow):
         return super(MicMainWindow,self).eventFilter(source,event)
 
     def showLogFile(self):
-        # TODO
+        """
+        Todo:
+            This method opens window with log file. Individual logs are pushed
+            from :func:`~messageCallback`.
+        """
         al.printW("MicMainWindow::showLogFile -> Not done yet!")
 
     def messageCallback(self,msg):
+        """ Print `msg` to statusbar. Connected to :attr:`~signals_message`.
+        Timestamp is added automatically.
+
+        Todo:
+            Messages should be looged into a logfile which can be viewed using
+            function :func:`~showLogFile`.
+
+        Args:
+            msg (str): Message to be printed.
+        """
         time = datetime.now().strftime('%H:%M:%S')
         msg = time + " " + msg
         # TODO: Save message into logfile
         self.statusbar.showMessage(msg)
 
     def closeEvent(self,*_):
+        """ Reimplementation of `closeEvent` is used to emit
+        :attr:`~signals_closeParent`.
+        """
         print("MicMainWindow::closeEvent")
         self.signals.closeParent.emit()
         QApplication.instance().quit()
 
 def main():
-    """ Call this function to open full microscope GUI """
+    """ Call this function to open full microscope GUI.
+
+    **Steps:**
+
+        1. Set style sheet from :download:`ablo.css <../ablo.css>`
+        2. Init main window :class:`MicMainWindow()`
+        3. Start application and ensure clean exit
+    """
     app = QApplication(sys.argv)
 
     app.setStyle('Fusion')
@@ -310,5 +331,5 @@ def main():
     sys.exit(app.exec_())   # Run main loop and ensure clean exit
 
 if __name__ == "__main__":
-    pass
-    # main()
+    """ Run `main()` for standalone execution. """
+    main()

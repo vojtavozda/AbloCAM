@@ -1,36 +1,13 @@
-.. AbloCAM documentation master file, created by
-   sphinx-quickstart on Tue Feb  9 11:10:39 2021.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
 
 AbloCAM documentation
 =====================
 
-This is test number X6
-
-.. automodule:: AbloMIC
-   :members:
-
-Text after AbloMIC
-
-.. automodule:: icons
-   :members:
-
-Text after icons
-
-.. automodule:: basler
-   :members:
-
-Text after basler
+This is test number X7
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   
+   docs
+   ablomic
+   xeryon
+   basler
