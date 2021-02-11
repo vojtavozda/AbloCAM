@@ -1,6 +1,10 @@
 """
 Xeryon motor control
 ====================
+
+Module to work with **Xeryon** motors. It employs ``Xeryon`` library (`link
+<https://xeryon.com/software/xeryon-python-library/>`_) provided by the *Xeryon
+company*.
 """
 
 # TODO =========================================================================
@@ -372,7 +376,11 @@ class Motor:
             self.axis.setDPOS(self.DPOS.get())  # Write position to encoder
 
 class HoverButton(QPushButton):
-    """ Button used for clickable LEDs - see `StatusGUI` widget """
+    """
+    **Bases:** :class:`QWidget`
+    
+    Button used for clickable LEDs in :class:`StatusGUI`. This button emits bool
+    signal :attr:`mouseHover` when hovered (`enter` or `leave`)."""
 
     mouseHover = pyqtSignal(bool)
 
@@ -390,18 +398,31 @@ class HoverButton(QPushButton):
 
 class StatusGUI(QWidget):
     """
-    Interactive status of Xeryon stage
-    ==================================
+    **Bases:** :class:`QWidget`
 
-    Clickable LED note:
-    -------------------
-    There is a problem, that when enabling LED for click so it changes its
-    status which is not desired. Therefore, an overlaying button of a
-    `HoverButton` class is placed over the given LED, its size and position is
-    updated within `resizeEvent`. Usual QPushButton has a problem that it does
-    not return hover signal which is needed to toggle hover of the LED and also
-    update tooltip of the button because tooltip of the LED cannot be accessed
-    as the LED is below the button. Howgh.
+    Interactive status of Xeryon stage.
+
+    Args:
+        motor (:class:`Motor`): Pointer to initialized xeryon motor. It **must**
+            be initialized already because signals of the motor are connected to
+            LEDs. 
+
+    Attributes:
+        led_connected: Connected to :func:`Motor.connected` signal.
+        led_findIndex: Connected to :func:`Motor.findIndex` signal.
+        led_moving: Connected to :func:`Motor.moving` signal.
+        led_LLIM: Connected to :func:`Motor.LLIM` signal.
+        led_HLIM: Connected to :func:`Motor.HLIM` signal.
+
+    Note:
+        **Clickable LED:** There is a problem, that when enabling LED for click
+        so it changes its status which is not desired. Therefore, an overlaying
+        button of a :class:`HoverButton` class is placed over the given LED, its
+        size and position is updated within :func:`resizeEvent`. Usual
+        :class:`QPushButton` has a problem that it does not return hover signal
+        which is needed to toggle hover of the LED and also update tooltip of
+        the button because tooltip of the LED cannot be accessed as the LED is
+        below the button. Howgh.
     """
 
     def __init__(self,motor=Motor()):
@@ -436,7 +457,7 @@ class StatusGUI(QWidget):
         self.btn_reload = QPushButton('',self)
         self.btn_reload.setIcon(al.standardIcon('SP_BrowserReload'))
         self.btn_reload.setStatusTip('Reload settings')
-        self.btn_reload.clicked.connect(self.reloadSettings)
+        self.btn_reload.clicked.connect(self.__reloadSettings)
         self.btn_reload.setCursor(Qt.PointingHandCursor)
 
         hbox.addStretch()
@@ -454,23 +475,23 @@ class StatusGUI(QWidget):
 
         self.btn_connect = HoverButton(self)
         self.btn_connect.setObjectName('btn_connect')
-        self.btn_connect.clicked.connect(self.btnClicked)
+        self.btn_connect.clicked.connect(self.__btnClicked)
         self.btn_connect.setStyleSheet("border: 0px;")      # FIXME: Tooltip
-        self.btn_connect.mouseHover.connect(self.btnHover)
+        self.btn_connect.mouseHover.connect(self.__btnHover)
 
         self.btn_findIndex = HoverButton(self)
         self.btn_findIndex.setObjectName('btn_find_index')
-        self.btn_findIndex.clicked.connect(self.btnClicked)
+        self.btn_findIndex.clicked.connect(self.__btnClicked)
         self.btn_findIndex.setStyleSheet("border: 0px;")    # FIXME: Tooltip
-        self.btn_findIndex.mouseHover.connect(self.btnHover)
+        self.btn_findIndex.mouseHover.connect(self.__btnHover)
 
         self.btn_moving = HoverButton(self)
         self.btn_moving.setObjectName('btn_moving')
-        self.btn_moving.clicked.connect(self.btnClicked)
+        self.btn_moving.clicked.connect(self.__btnClicked)
         self.btn_moving.setStyleSheet("border: 0px;")
-        self.btn_moving.mouseHover.connect(self.btnHover)
+        self.btn_moving.mouseHover.connect(self.__btnHover)
 
-    def reloadSettings(self):
+    def __reloadSettings(self):
         try:
             self.motor.controller.reset()
             self.motor.disconnect()
@@ -478,7 +499,7 @@ class StatusGUI(QWidget):
         except Exception as ex:
             al.printException(ex)
 
-    def btnHover(self,hover):
+    def __btnHover(self,hover):
         sender = self.sender()
         if sender.objectName() == 'btn_connect':
             self.led_connected.changeHover(hover)
@@ -496,7 +517,7 @@ class StatusGUI(QWidget):
             self.btn_moving.setToolTip(self.led_moving.toolTip())
             self.btn_moving.setStatusTip('Click to STOP')
 
-    def btnClicked(self):
+    def __btnClicked(self):
         sender = self.sender()
         if sender.objectName() == 'btn_connect':
             if self.motor.connected:
@@ -509,7 +530,8 @@ class StatusGUI(QWidget):
             self.motor.controller.stopMovements()
 
     def resizeEvent(self,*_):
-        """ Buttons overlaying given LEDs must follow their positions """
+        """ Reimplementation of built-in function.
+        Change positions of buttons so they overlay according LEDs. """
         self.btn_connect.move(self.led_connected.x(),self.led_connected.y())
         self.btn_connect.resize(self.led_connected.width(),self.led_connected.height())
         
@@ -521,33 +543,43 @@ class StatusGUI(QWidget):
 
 class FocusableQLineEdit(QLineEdit):
     """
-    This modification of QLineEdit emits signal `lostFocus` when QLineEdit
-    widget looses focus.
+    **Bases:** :class:`QLineEdit`
+
+    This modification of :class:`QLineEdit` emits signal :attr:`lostFocus` when
+    :class:`QLineEdit` widget looses focus. This signal can be caught by a slot
+    function which, for example, can set some other variable to value set by
+    user to the entry field.
+
+    Attributes:
+        lostFocus (:class:`pyqtSignal`): Signal which emits upon loosing focus.
     """
 
     lostFocus = pyqtSignal()
 
     def focusOutEvent(self,event):
-        # Emit signal
-        self.lostFocus.emit()
+        """ Reimplementation of built-in function. """
+        self.lostFocus.emit()           # Emit signal
         # Pass arguments to super()
         super(FocusableQLineEdit,self).focusOutEvent(event)
 
 class MoveHGUI(QWidget):
     """
-    MoveGUI
-    =======
+    **Bases:** :class:`QWidget`
 
-    Position of motor, step buttons, step field
+    GUI for horizontal movements. Analogical to :class:`MoveVGUI` and
+    :class:`MoveRGUI`.
 
-    Modification of QLineEdits employing `FocusableQLineEdit`
-    ---------------------------------------------------------
-    One entry field is used to show position of a motor (which is set by signal
-    callback) and also to set desired position. Value of the field is changed
-    automatically only if it does not have a focus. If it has a focus, value can
-    be changed and appropriate callback (set this value) is called when the
-    field looses its focus (here we need modified `FocusableQLineEdit`) or when
-    pressing enter/return (see `keyPressEvent`).
+    It contains position of motor, step buttons, step field.
+
+    Note:
+        **Modification of** :class:`QLineEdit` **employing**
+        :class:`FocusableQLineEdit` **:** One entry field is used to show
+        position of a motor (which is set by signal callback) and also to set
+        desired position. Value of the field is changed automatically only if it
+        does not have a focus. If it has a focus, value can be changed and
+        appropriate callback (set this value) is called when the field looses
+        its focus (here we need the modified :class:`FocusableQLineEdit`) or
+        when pressing enter/return (see :func:`keyPressEvent`).
     """
 
     def __init__(self,motor=Motor()):
@@ -569,10 +601,10 @@ class MoveHGUI(QWidget):
         self.qlePos.setFixedSize(50,25)
         self.qlePos.setToolTip('Motor position')
         self.qlePos.setObjectName('qle_pos')
-        # When qlePos looses focus, `self.qlePosSet` is called (motor.DPOS.set)
-        self.qlePos.lostFocus.connect(self.qlePosSet)
+        # When qlePos looses focus, `self.__qlePosSet` is called (motor.DPOS.set)
+        self.qlePos.lostFocus.connect(self.__qlePosSet)
         # Update field value as motor.EPOS changes
-        self.motor.EPOS.signal.connect(partial(self.qleChange,self.qlePos))
+        self.motor.EPOS.signal.connect(partial(self.__qleChange,self.qlePos))
 
         # Buttons for steps to the LEFT
         self.btnL1 = QPushButton('',self)
@@ -587,9 +619,9 @@ class MoveHGUI(QWidget):
         self.btnL2.setToolTip(al.unicode('&larr;'))
         self.btnL3.setToolTip(al.unicode('Shift + &larr;'))
 
-        self.btnL1.clicked.connect(self.btnClicked)
-        self.btnL2.clicked.connect(self.btnClicked)
-        self.btnL3.clicked.connect(self.btnClicked)
+        self.btnL1.clicked.connect(self.__btnClicked)
+        self.btnL2.clicked.connect(self.__btnClicked)
+        self.btnL3.clicked.connect(self.__btnClicked)
 
         self.btnL1.setObjectName('L1')
         self.btnL2.setObjectName('L2')
@@ -612,9 +644,9 @@ class MoveHGUI(QWidget):
         self.btnR2.setToolTip(al.unicode('&rarr;'))
         self.btnR3.setToolTip(al.unicode('Shift + &rarr;'))
 
-        self.btnR1.clicked.connect(self.btnClicked)
-        self.btnR2.clicked.connect(self.btnClicked)
-        self.btnR3.clicked.connect(self.btnClicked)
+        self.btnR1.clicked.connect(self.__btnClicked)
+        self.btnR2.clicked.connect(self.__btnClicked)
+        self.btnR3.clicked.connect(self.__btnClicked)
 
         self.btnR1.setObjectName('R1')
         self.btnR2.setObjectName('R2')
@@ -628,11 +660,11 @@ class MoveHGUI(QWidget):
         self.qleStep = FocusableQLineEdit(self)
         self.qleStep.setFixedSize(50,25)
         self.qleStep.setToolTip('Step size')
-        # When qleStep looses focus, `self.qleStepSet` is called
+        # When qleStep looses focus, `self.__qleStepSet` is called
         # (motor.stepSize.set).
-        self.qleStep.lostFocus.connect(self.qleStepSet)
+        self.qleStep.lostFocus.connect(self.__qleStepSet)
         # Update field value as motor.stepSize changes
-        self.motor.stepSize.signal.connect(partial(self.qleChange,self.qleStep))
+        self.motor.stepSize.signal.connect(partial(self.__qleChange,self.qleStep))
 
         # Add all widgets to the layout
         hbox.addStretch()
@@ -655,21 +687,21 @@ class MoveHGUI(QWidget):
 
         self.update()   # Enable or disable buttons on start
 
-    def qlePosSet(self):
+    def __qlePosSet(self):
         """ Set motor.DPOS as qlePos looses focus or when pressing enter """
         if self.motor.connected:
             try:    val = float(self.qlePos.text())
             except: val = 0
             self.motor.DPOS.set(val)
 
-    def qleStepSet(self):
+    def __qleStepSet(self):
         """
         Set motor.stepSize as qleStep looses focus or when pressing enter
         """
         if self.motor.connected:
             self.motor.stepSize.set(float(self.qleStep.text()))
 
-    def qleChange(self,obj:QLineEdit,value=None):
+    def __qleChange(self,obj:QLineEdit,value=None):
         """ Change value of a QLineEdit
         It is invoked by motor.EPOS.signal which emits periodically as
         motor.updateData is called.
@@ -679,7 +711,7 @@ class MoveHGUI(QWidget):
             obj.setText(str(value))
             obj.setCursorPosition(0)    # Show beginning of the text, not end
 
-    def btnClicked(self):
+    def __btnClicked(self):
         """ Callback of button click """
 
         objectName = self.sender().objectName()
@@ -701,9 +733,9 @@ class MoveHGUI(QWidget):
         # If one of QLineEdits has focus, enter key calls appropriate function
         if event.key() in [Qt.Key_Enter,Qt.Key_Return]:
             if self.qlePos.hasFocus():
-                self.qlePosSet()    # Set motor position
+                self.__qlePosSet()    # Set motor position
             elif self.qleStep.hasFocus():
-                self.qleStepSet()   # Update motor step size
+                self.__qleStepSet()   # Update motor step size
 
     def update(self,*_):
         """ Update `enable` of controls according to status of the motor """
@@ -717,7 +749,11 @@ class MoveHGUI(QWidget):
         self.btnR3.setEnabled(self.motor.connected)
 
 class MoveVGUI(QWidget):
-    """ GUI for vertical movements """
+    """
+    **Bases:** :class:`QWidget`
+
+    GUI for vertical movements. Analogical to :class:`MoveHGUI`.
+    """
 
     # FUTURE: Buttons can be replaced by a vertical joystick
 
@@ -736,20 +772,20 @@ class MoveVGUI(QWidget):
         self.qlePos.setFixedSize(50,25)
         self.qlePos.setToolTip('Motor position')
         self.qlePos.setObjectName('qle_pos')
-        # When qlePos looses focus, `self.qlePosSet` is called (motor.DPOS.set)
-        self.qlePos.lostFocus.connect(self.qlePosSet)
+        # When qlePos looses focus, `self.__qlePosSet` is called (motor.DPOS.set)
+        self.qlePos.lostFocus.connect(self.__qlePosSet)
         # Update field value as motor.EPOS changes
-        self.motor.EPOS.signal.connect(partial(self.qleChange,self.qlePos))
+        self.motor.EPOS.signal.connect(partial(self.__qleChange,self.qlePos))
         
         # QLineEdit - set step
         self.qleStep = FocusableQLineEdit(self)
         self.qleStep.setFixedSize(50,25)
         self.qleStep.setToolTip('Step size')
-        # When qleStep looses focus, `self.qleStepSet` is called
+        # When qleStep looses focus, `self.__qleStepSet` is called
         # (motor.stepSize.set).
-        self.qleStep.lostFocus.connect(self.qleStepSet)
+        self.qleStep.lostFocus.connect(self.__qleStepSet)
         # Update field value as motor.stepSize changes
-        self.motor.stepSize.signal.connect(partial(self.qleChange,self.qleStep))
+        self.motor.stepSize.signal.connect(partial(self.__qleChange,self.qleStep))
 
         vbox = QVBoxLayout()
         vbox.addWidget(lbl)
@@ -762,7 +798,7 @@ class MoveVGUI(QWidget):
 
         self.sld = QSlider(Qt.Vertical,self)
         self.sld.setCursor(Qt.PointingHandCursor)
-        self.sld.valueChanged.connect(self.sldValueChanged)
+        self.sld.valueChanged.connect(self.__sldValueChanged)
 
         # Buttons for steps UP
         self.btnU1 = QPushButton('',self)
@@ -777,9 +813,9 @@ class MoveVGUI(QWidget):
         self.btnU2.setToolTip('-')
         self.btnU3.setToolTip('Shift + -')
 
-        self.btnU1.clicked.connect(self.btnClicked)
-        self.btnU2.clicked.connect(self.btnClicked)
-        self.btnU3.clicked.connect(self.btnClicked)
+        self.btnU1.clicked.connect(self.__btnClicked)
+        self.btnU2.clicked.connect(self.__btnClicked)
+        self.btnU3.clicked.connect(self.__btnClicked)
 
         self.btnU1.setObjectName('U1')
         self.btnU2.setObjectName('U2')
@@ -802,9 +838,9 @@ class MoveVGUI(QWidget):
         self.btnD2.setToolTip('+')
         self.btnD3.setToolTip('Shift + +')
 
-        self.btnD1.clicked.connect(self.btnClicked)
-        self.btnD2.clicked.connect(self.btnClicked)
-        self.btnD3.clicked.connect(self.btnClicked)
+        self.btnD1.clicked.connect(self.__btnClicked)
+        self.btnD2.clicked.connect(self.__btnClicked)
+        self.btnD3.clicked.connect(self.__btnClicked)
 
         self.btnD1.setObjectName('D1')
         self.btnD2.setObjectName('D2')
@@ -839,30 +875,30 @@ class MoveVGUI(QWidget):
 
         self.update()
 
-    def sldValueChanged(self,value):
+    def __sldValueChanged(self,value):
         """ Set motor.DPOS if slider moved by user """
         if self.sld.hasFocus():
             self.motor.DPOS.set(value)
 
-    def sldSetValue(self,value):
+    def __sldSetValue(self,value):
         if not self.sld.hasFocus():
             self.sld.setValue(int(value))
 
-    def qlePosSet(self):
+    def __qlePosSet(self):
         """ Set motor.DPOS as qlePos looses focus or when pressing enter """
         if self.motor.connected:
             try:    val = float(self.qlePos.text())
             except: val = 0
             self.motor.DPOS.set(val)
 
-    def qleStepSet(self):
+    def __qleStepSet(self):
         """
         Set motor.stepSize as qleStep looses focus or when pressing enter
         """
         if self.motor.connected:
             self.motor.stepSize.set(float(self.qleStep.text()))
 
-    def qleChange(self,obj:QLineEdit,y=None):
+    def __qleChange(self,obj:QLineEdit,y=None):
         """ Change value of a QLineEdit
         It is invoked by motor.EPOS.signal which emits periodically as
         motor.updateData is called.
@@ -872,7 +908,7 @@ class MoveVGUI(QWidget):
             obj.setText(str(y))
             obj.setCursorPosition(0)    # Show beginning of the text, not end
 
-    def btnClicked(self):
+    def __btnClicked(self):
         """ Callback of button click """
 
         objectName = self.sender().objectName()
@@ -894,21 +930,21 @@ class MoveVGUI(QWidget):
         # If one of QLineEdits has focus, enter key calls appropriate function
         if event.key() in [Qt.Key_Enter,Qt.Key_Return]:
             if self.qlePos.hasFocus():
-                self.qlePosSet()    # Set motor position
+                self.__qlePosSet()    # Set motor position
             elif self.qleStep.hasFocus():
-                self.qleStepSet()   # Update motor step size
+                self.__qleStepSet()   # Update motor step size
 
     def update(self,*_):
         """ Update parameters of GUI """
 
         # Disconnect signals connected with the motor
-        try:    self.motor.EPOS.signal.disconnect(self.sldSetValue)
+        try:    self.motor.EPOS.signal.disconnect(self.__sldSetValue)
         except: pass
 
         # Set up slider according to motor settings
         if self.motor.connected:
             self.lims = self.motor.limits
-            self.motor.EPOS.signal.connect(self.sldSetValue)
+            self.motor.EPOS.signal.connect(self.__sldSetValue)
             self.sld.setMinimum(self.lims[0])
             self.sld.setMaximum(self.lims[1])
         
@@ -924,7 +960,11 @@ class MoveVGUI(QWidget):
         self.btnU3.setEnabled(self.motor.connected)
 
 class MoveRGUI(QWidget):
-    """ GUI for vertical movements """
+    """
+    **Bases:** :class:`QWidget`
+
+    GUI for rotational movements. Analogical to :class:`MoveHGUI`.
+    """
 
     # FUTURE: Buttons can be replaced by a vertical joystick
 
@@ -942,20 +982,20 @@ class MoveRGUI(QWidget):
         self.qlePos.setFixedSize(50,25)
         self.qlePos.setToolTip('Motor position')
         self.qlePos.setObjectName('qle_pos')
-        # When qlePos looses focus, `self.qlePosSet` is called (motor.DPOS.set)
-        self.qlePos.lostFocus.connect(self.qlePosSet)
+        # When qlePos looses focus, `self.__qlePosSet` is called (motor.DPOS.set)
+        self.qlePos.lostFocus.connect(self.__qlePosSet)
         # Update field value as motor.EPOS changes
-        self.motor.EPOS.signal.connect(partial(self.qleChange,self.qlePos))
+        self.motor.EPOS.signal.connect(partial(self.__qleChange,self.qlePos))
         
         # QLineEdit - set step
         self.qleStep = FocusableQLineEdit(self)
         self.qleStep.setFixedSize(50,25)
         self.qleStep.setToolTip('Step size')
-        # When qleStep looses focus, `self.qleStepSet` is called
+        # When qleStep looses focus, `self.__qleStepSet` is called
         # (motor.stepSize.set).
-        self.qleStep.lostFocus.connect(self.qleStepSet)
+        self.qleStep.lostFocus.connect(self.__qleStepSet)
         # Update field value as motor.stepSize changes
-        self.motor.stepSize.signal.connect(partial(self.qleChange,self.qleStep))
+        self.motor.stepSize.signal.connect(partial(self.__qleChange,self.qleStep))
 
         vbox = QVBoxLayout()
         vbox.addWidget(lbl)
@@ -976,8 +1016,8 @@ class MoveRGUI(QWidget):
         self.btnL.setToolTip('<')
         self.btnR.setToolTip('>')
 
-        self.btnL.clicked.connect(self.btnClicked)
-        self.btnR.clicked.connect(self.btnClicked)
+        self.btnL.clicked.connect(self.__btnClicked)
+        self.btnR.clicked.connect(self.__btnClicked)
 
         self.btnL.setObjectName('L')
         self.btnR.setObjectName('R')
@@ -990,7 +1030,7 @@ class MoveRGUI(QWidget):
         self.qdial.setWrapping(True)
         self.qdial.setCursor(Qt.PointingHandCursor)
         self.qdial.setValue(0)
-        self.qdial.valueChanged.connect(self.qdialChange)
+        self.qdial.valueChanged.connect(self.__qdialChange)
         self.qdial.setMinimum(0)
         self.qdial.setMaximum(360)
 
@@ -1008,21 +1048,21 @@ class MoveRGUI(QWidget):
 
         self.update()
 
-    def qlePosSet(self):
+    def __qlePosSet(self):
         """ Set motor.DPOS as qlePos looses focus or when pressing enter """
         if self.motor.connected:
             try:    val = float(self.qlePos.text())
             except: val = 0
             self.motor.DPOS.set(val)
 
-    def qleStepSet(self):
+    def __qleStepSet(self):
         """
         Set motor.stepSize as qleStep looses focus or when pressing enter
         """
         if self.motor.connected:
             self.motor.stepSize.set(float(self.qleStep.text()))
 
-    def qleChange(self,obj:QLineEdit,y=None):
+    def __qleChange(self,obj:QLineEdit,y=None):
         """ Change value of a QLineEdit
         It is invoked by motor.EPOS.signal which emits periodically as
         motor.updateData is called.
@@ -1032,7 +1072,7 @@ class MoveRGUI(QWidget):
             obj.setText(str(y))
             obj.setCursorPosition(0)    # Show beginning of the text, not end
 
-    def btnClicked(self):
+    def __btnClicked(self):
         """ Callback of button click """
 
         objectName = self.sender().objectName()
@@ -1042,12 +1082,12 @@ class MoveRGUI(QWidget):
             sign = +1
         self.motor.step(sign * self.motor.stepSize.get())      
 
-    def qdialChange(self,value):
+    def __qdialChange(self,value):
         """ Called when qdial value is changed -> set motor DPOS"""
         if self.qdial.hasFocus():
             self.motor.DPOS.set(value)
 
-    def qdialSet(self,value):
+    def __qdialSet(self,value):
         """ Set value of self.qdial if not affected by user.
         Usually signal of motor.EPOS emits and calls this function.
         """
@@ -1060,19 +1100,19 @@ class MoveRGUI(QWidget):
         # If one of QLineEdits has focus, enter key calls appropriate function
         if event.key() in [Qt.Key_Enter,Qt.Key_Return]:
             if self.qlePos.hasFocus():
-                self.qlePosSet()    # Set motor position
+                self.__qlePosSet()    # Set motor position
             elif self.qleStep.hasFocus():
-                self.qleStepSet()   # Update motor step size
+                self.__qleStepSet()   # Update motor step size
 
     def update(self,*_):
         """ Update parameters of GUI """
 
         # Disconnect signals connected with the motor
-        try:    self.motor.EPOS.signal.disconnect(self.qdialSet)
+        try:    self.motor.EPOS.signal.disconnect(self.__qdialSet)
         except: pass
 
         if self.motor.connected:
-            self.motor.EPOS.signal.connect(self.qdialSet)
+            self.motor.EPOS.signal.connect(self.__qdialSet)
         
         self.qlePos.setEnabled(self.motor.connected)
         self.qleStep.setEnabled(self.motor.connected)
@@ -1083,19 +1123,22 @@ class MoveRGUI(QWidget):
 
 class XYWidget(QWidget):
     """
-    XYWidget
-    ========
+    **Bases:** :class:`QWidget`
 
-    - canvas with sample geometry
-    - X and Y slider for horizontal stage movements
+    It contains canvas with sample geometry, sliders horizontal and vertical
+    movements. Enable and disable of control widgets is handled by
+    :func:`update`. Function :func:`keyPressEvent` catches navigation arrows so
+    motors can be moved with keyboard.
 
-    Known issues
-    ------------
-    [ ] Conflict between signals (slider.valueChanged -> set.DPOS) and
-        (motor.DPOS.set() -> slider.setValue) results in double call of
-        motor.__setDPOS. This makes implementation of DoubleSlider difficult and
-        setting of DPOS via sliders is therefore unabled. It can be later fixed
-        by creating own sliders which show both DPOS and EPOS.
+    Tip:
+        Keypress can be caught by :func:`keyPressEvent` only if this widget has
+        a focus. Therefore, ``eventFilter`` should be installed within the main
+        window and ``ESC`` key press should set focus to this widget.
+
+    Args:
+        motorX (:class:`Motor`): Pointer to the motor for horizontal movements.
+        motorY (:class:`Motor`): Pointer to the motor for vertical movements.
+
     """
 
     # TODO: Canvas -> right click -> add custom point
@@ -1111,9 +1154,6 @@ class XYWidget(QWidget):
         self.motorX.LedSig.connected.connect(self.update)
         self.motorY.LedSig.connected.connect(self.update)
 
-        self.stepx = 1
-        self.stepy = 1
-
         # Limits of motors (used for drawing canvas and sliders)
         self.xlim = [-1,1]
         self.ylim = [-1,1]
@@ -1124,7 +1164,7 @@ class XYWidget(QWidget):
         self.lblCoords.setStyleSheet('font-weight: bold')
         self.btnChange = QPushButton('Change',self)
         self.btnChange.setObjectName('btn_coord_change')
-        self.btnChange.clicked.connect(self.btnClicked)
+        self.btnChange.clicked.connect(self.__btnClicked)
         self.btnChange.setCursor(Qt.PointingHandCursor)
         cdL = QHBoxLayout()
         cdL.addWidget(lbl)
@@ -1146,8 +1186,8 @@ class XYWidget(QWidget):
         self.sldY.setCursor(Qt.PointingHandCursor)
 
         # Connect action to sliders
-        self.sldX.valueChanged.connect(self.sldValueChanged)
-        self.sldY.valueChanged.connect(self.sldValueChanged)
+        self.sldX.valueChanged.connect(self.__sldValueChanged)
+        self.sldY.valueChanged.connect(self.__sldValueChanged)
 
         self.update()
 
@@ -1158,12 +1198,12 @@ class XYWidget(QWidget):
         # $ [ ] Add point
         self.pbtnMove = QPushButton('Move',self)
         self.pbtnMove.setObjectName('pbtn_move')
-        self.pbtnMove.clicked.connect(self.btnClicked)
+        self.pbtnMove.clicked.connect(self.__btnClicked)
         self.pbtnMove.setCursor(Qt.PointingHandCursor)
 
         self.pbtnHAlign = QPushButton('HAlign',self)
         self.pbtnHAlign.setObjectName('pbtn_halign')
-        self.pbtnHAlign.clicked.connect(self.btnClicked)
+        self.pbtnHAlign.clicked.connect(self.__btnClicked)
         self.pbtnHAlign.setCursor(Qt.PointingHandCursor)
 
         pbtnHBox = QHBoxLayout()
@@ -1201,10 +1241,10 @@ class XYWidget(QWidget):
         self.plt.addItem(self.hlineEPOS,ignoreBounds=True)
 
         # Connect mouse events
-        # self.plt.scene().sigMouseMoved.connect(self.canvasMouseMoved)
+        # self.plt.scene().sigMouseMoved.connect(self.__canvasMouseMoved)
         self.proxy = pg.SignalProxy(self.plt.scene().sigMouseMoved,
-            rateLimit=60,slot=self.canvasMouseMoved)
-        self.plt.scene().sigMouseClicked.connect(self.canvasMouseClick)
+            rateLimit=60,slot=self.__canvasMouseMoved)
+        self.plt.scene().sigMouseClicked.connect(self.__canvasMouseClick)
 
         self.rectMotorLims = None
 
@@ -1233,7 +1273,7 @@ class XYWidget(QWidget):
         self.setMinimumHeight(250)
         self.setMaximumHeight(300)
 
-    def canvasMouseMoved(self,event):
+    def __canvasMouseMoved(self,event):
         """ Called when mouse moves over the canvas """
         pos = event[0]
         if self.plt.sceneBoundingRect().contains(pos):
@@ -1255,7 +1295,7 @@ class XYWidget(QWidget):
             # Hide coordinates when mouse is out
             self.txt.setVisible(False)
 
-    def canvasMouseClick(self,event):
+    def __canvasMouseClick(self,event):
         """ Called when mouse clicks on the canvas """
         if event.button() == 1:
             # Left click
@@ -1263,9 +1303,9 @@ class XYWidget(QWidget):
             mousePoint = self.plt.vb.mapSceneToView(pos)
             x = mousePoint.x()
             y = mousePoint.y()
-            print(f"XYWidget:canvasMouseClick(): ({x},{y})")
-            self.moveX(x)
-            self.moveY(y)
+            print(f"XYWidget:__canvasMouseClick(): ({x},{y})")
+            self.__moveX(x)
+            self.__moveY(y)
         elif event.button() == 2:
             # Right click
             self.plt.autoRange()
@@ -1273,7 +1313,7 @@ class XYWidget(QWidget):
             # Middle click
             pass
 
-    def XEPOSChanged(self,value):
+    def __XEPOSChanged(self,value):
         """ EPOS of motor X changed """
         # --> change position of vertical line
         self.vlineEPOS.setPos(value)
@@ -1281,7 +1321,7 @@ class XYWidget(QWidget):
         if not self.sldX.hasFocus():
             self.sldX.setValue(int(value))
 
-    def YEPOSChanged(self,value):
+    def __YEPOSChanged(self,value):
         """ EPOS of motor Y changed """
         # --> change position of horizontal line
         self.hlineEPOS.setPos(value)
@@ -1289,7 +1329,7 @@ class XYWidget(QWidget):
         if not self.sldY.hasFocus():
             self.sldY.setValue(int(value))
 
-    def btnClicked(self):
+    def __btnClicked(self):
         """ Any button click callback """
         sender = self.sender()
         if sender.objectName() == 'btn_coord_change':
@@ -1301,16 +1341,16 @@ class XYWidget(QWidget):
             elif self.CS == 2:
                 self.lblCoords.setText('Sample')
 
-    def sldValueChanged(self,value):
+    def __sldValueChanged(self,value):
         """ If slider moved manually by user, set DPOS """
         sender = self.sender()
         if sender.hasFocus():
             if sender.objectName() == 'slider_X':
-                self.moveX(value)
+                self.__moveX(value)
             elif sender.objectName() == 'slider_Y':
-                self.moveY(value)
+                self.__moveY(value)
 
-    def moveX(self,value):
+    def __moveX(self,value):
         """ Move in x-direction """
         # This function handles which coordinate system is set and then moves
         # with xeryon motors accordingly
@@ -1318,20 +1358,19 @@ class XYWidget(QWidget):
             if self.CS == 1:
                 self.motorX.DPOS.set(value)
 
-    def moveY(self,value):
+    def __moveY(self,value):
         """ Move in y-direction """
         # This function handles which coordinate system is set and then moves
         # with xeryon motors accordingly
-        # print("Slider::moveY",self.sender().objectName())
         if self.motorY.connected:
             if self.CS == 1:
                 self.motorY.DPOS.set(value)
 
-    def stepX(self,value):
+    def __stepX(self,value):
         """ Step `value` in x-direction """
         self.motorX.step(value)
 
-    def stepY(self,value):
+    def __stepY(self,value):
         """ Step `value` in y-direction """
         self.motorY.step(value)
 
@@ -1351,19 +1390,19 @@ class XYWidget(QWidget):
 
         # Step according to pressed arrow
         if event.key() == Qt.Key_Left:
-            self.stepX(-self.motorX.stepSize.get() * multiplier)
+            self.__stepX(-self.motorX.stepSize.get() * multiplier)
         elif event.key() == Qt.Key_Right:
-            self.stepX(+self.motorX.stepSize.get() * multiplier)
+            self.__stepX(+self.motorX.stepSize.get() * multiplier)
         elif event.key() == Qt.Key_Down:
-            self.stepY(-self.motorY.stepSize.get() * multiplier)
+            self.__stepY(-self.motorY.stepSize.get() * multiplier)
         elif event.key() == Qt.Key_Up:
-            self.stepY(+self.motorY.stepSize.get() * multiplier)
+            self.__stepY(+self.motorY.stepSize.get() * multiplier)
 
     def update(self,*_):
         """ Update canvas, sliders (limits and enable) """
 
         # Disconnect signals connected with motorX
-        try:    self.motorX.EPOS.signal.disconnect(self.XEPOSChanged)
+        try:    self.motorX.EPOS.signal.disconnect(self.__XEPOSChanged)
         except: pass
         # Set up sliders according to motor settings
         if self.motorX.connected:
@@ -1372,12 +1411,12 @@ class XYWidget(QWidget):
             self.sldX.setMinimum(self.xlim[0])  # Set low limit
             self.sldX.setMaximum(self.xlim[1])  # Set high limit
             # Connect signals
-            self.motorX.EPOS.signal.connect(self.XEPOSChanged)
+            self.motorX.EPOS.signal.connect(self.__XEPOSChanged)
         else:
             self.sldX.setEnabled(False)         # Disable sliderX
         
         # Disconnect signals connected with motorX
-        try:    self.motorY.EPOS.signal.disconnect(self.YEPOSChanged)
+        try:    self.motorY.EPOS.signal.disconnect(self.__YEPOSChanged)
         except: pass
         # Set up sliders according to motor settings
         if self.motorY.connected:
@@ -1386,7 +1425,7 @@ class XYWidget(QWidget):
             self.sldY.setMinimum(self.ylim[0])  # Set low limit
             self.sldY.setMaximum(self.ylim[1])  # Set high limit
             # Connect signals
-            self.motorY.EPOS.signal.connect(self.YEPOSChanged)
+            self.motorY.EPOS.signal.connect(self.__YEPOSChanged)
         else:
             self.sldY.setEnabled(False)         # Disable sliderY
 
@@ -1409,7 +1448,9 @@ class XYWidget(QWidget):
 
 class MenuActionSettingsFile(QAction):
     """
-    QAction to edit Xeryon settings file using embedded editor.
+    **Bases:** :class:`QAction`
+
+    QAction to edit *Xeryon settings file* using embedded editor.
     Import this QAction into menu.
     """
 
@@ -1429,9 +1470,11 @@ class MenuActionSettingsFile(QAction):
         self.editor.OpenFile(xe.SETTINGS_FILENAME)
 
 class XeryonGUI(QWidget):
-
     """
-    Main GUI for Xeryon motors.
+    **Bases:** :class:`QWidget`
+
+    Main GUI for Xeryon motors. It is optimized to show what all can be done
+    rather than to be implemented into larger application.
     """
 
     def __init__(self,parentCloseSignal=None,
@@ -1463,24 +1506,20 @@ class XeryonGUI(QWidget):
         if parentCloseSignal is not None:
             parentCloseSignal.connect(self.parentClose)
 
-        self.initUI()
-
-    def initUI(self):
-        pass
-
     def parentClose(self):
         pass
 
 class XeryonMainWindow(QMainWindow):
+    """
+    **Bases:** :class:`QMainWindow`
 
-    """ Main window which encapsulates Xeryon GUI """
+     Main window which encapsulates :class:`XeryonGUI` as the central widget.
+     Opens upon standalone execution of the ``xeryon`` module. It also connects
+     several xeryon stages, inits menubar, statusbar and installs event filter
+     to catch key press."""
 
     def __init__(self):
         super().__init__()
-
-        self.initUI()
-
-    def initUI(self):
 
         self.setGeometry(100,100,300,300)
         self.setWindowTitle("Xeryon GUI")
@@ -1542,6 +1581,7 @@ class XeryonMainWindow(QMainWindow):
         # self.micGUI.xystage.setFocus()  # Default focus to XY widget
 
     def eventFilter(self,source,event):
+        """ Reimplementation of `eventFilter` to catch ``ESC``. """
         if event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Escape:
                 self.xeryonGUI.xywidget.setFocus()
@@ -1549,15 +1589,18 @@ class XeryonMainWindow(QMainWindow):
         return super(XeryonMainWindow,self).eventFilter(source,event)
 
     def closeEvent(self,*_):
-        """ Reimplement closeEvent() """
+        """ Reimplement closeEvent() so :attr:`~signals_closeParent` can emit.
+        """
         self.signals.closeParent.emit()
 
 def main():
-    """ Run this if this is the main file """
+    """ Function used for standalone execution. It opens main window
+    :class:`XeryonMainWindow` and ensures clean exit.
+    """
     app = QApplication(sys.argv)
     handle = XeryonMainWindow()     # pylint: disable=unused-variable
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
-
+    """ Run `main()` for standalone execution. """
     main()

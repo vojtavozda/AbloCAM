@@ -6,7 +6,17 @@ Basler camera
 
 Self-standing module for full control of **Basler camera** employing ``pypylon``
 (see its `github page <https://github.com/basler/pypylon>`_ for further usage).
+Library ``pyqtgraph`` used to display video output.
 
+If run separately, :func:`main` is executed. It inits :class:`BaslerMainWindow`
+which sets :class:`BaslerGUI` as a central widget. This widget which holds all
+buttons and sliders. It also calls :class:`Basler` which inits the camera using 
+``pypylon`` library. Video from the camera is shown in a standalone window
+:class:`BaslerView`. A relatively fast video stream is reached by grabbing
+images in a separate thread run by :class:`Thread`.
+
+If this module is a part of larger project, :class:`BaslerGUI` can be implemented
+as a widget into a custom window.
 """
 
 
@@ -32,6 +42,15 @@ import ablolib as al
 
 
 class MyImageItem(pg.ImageItem):
+    """
+    **Bases:** :class:`pyqtgraph.ImageItem`
+
+    Modification of the ``ImageItem`` so mouse click events can be caught.
+
+    Args:
+        par: Pointer to parrent. Defaults to None.
+    """
+
 
     def __init__(self,*args,par=None,**kwargs):
         super().__init__(*args,**kwargs)
@@ -55,44 +74,57 @@ class MyImageItem(pg.ImageItem):
 
 class Basler():
     """
-    Object which connects to camera, gets images etc.
-    This is called by BaslerGUI to get data from the camera.
-    Call it only if you want to create your own GUI.
+    Object which connects to the camera, gets images etc. This is initiated by
+    :class:`BaslerGUI`. Call it only if you want to create your own GUI. This
+    class employs the ``pypylon`` library to comunicate with the camera.
+
+    Args:
+        connectionSignal: Emits True (False) upon (dis)connection. Defaults to
+            None.
+        messageSignal: Status messages are emitted here. Defaults to None.
+
+    Attributes:
+        cam (:class:`pylon.InstantCamera`): Camera object. Initiated in
+            :func:`connect`. 
+        connected (bool): True if connected, False otherwise.
+        resolution (:class:`ablolib.DynVar`): Dynamic variable, should be accessed
+            via `set() and `get()` methods. The value corresponds to percentual 
+            ratio between maximum and minimum resolution.
+        exposure (:class:`ablolib.DynVar`): Dynamic variable,...
     """
 
     def __init__(self,connectionSignal=None,messageSignal=None):
         self.cam = None
         self.connected = False
         self.connectionSignal = connectionSignal
-        self.connectionSignal.connect(self.setConnection)
+        self.connectionSignal.connect(self.__setConnectionStatus)
         self.messageSignal = messageSignal
 
-        # Resolution is dynamic variable, should be accessed via set() and get()
-        # methods. The value corresponds to percentual ratio between maximum and
-        # minimum resolution.
+        # Init resolution and connect it to a slot function.
         self.resolution = al.DynVar(30)
         self.resolution.signal.connect(self.__setResolution)
 
+        # Init exposureT and connect it to a slot function.
         self.exposureT = al.DynVar(0)
         self.exposureT.signal.connect(self.__setExposureT)
 
         self.connected = self.connect()
 
-    def setConnection(self,connection_status):
+    def __setConnectionStatus(self,connection_status):
         self.connected = connection_status
 
     def connect(self):
         """
-        Connect Basler camera. Initialization of `self.cam`.
+        Connect Basler camera. Initialization of :attr:`cam`.
 
-        Returns
-            - True:  connection successfull
-            - False: connection unsuccessfull
+        Returns:
+            bool: The return value. True for success, False otherwise.
         """
 
         self.connected = False
         print('Connecting Basler camera:',end='')
 
+        # Attempt to connect several times
         for _ in range(10):
             try:
                 # Connect camera
@@ -105,9 +137,7 @@ class Basler():
 
         if self.connected:
             self.exposureT.set(self.cam.ExposureTime.Min)
-            # print(self.cam.ExposureTime.Min)
-            # print(self.cam.ExposureTime.Max)
-            self.__setResolution()                  # Set camera resolution
+            self.__setResolution()              # Set camera default resolution
             al.printOK(" Connected!")
             msg = "Basler camera connected!"
             al.emitMsg(self.messageSignal,msg)
@@ -137,10 +167,11 @@ class Basler():
 
     def grabImg(self):
 
-        """ Returns image data """
-
-        # Find more pypylon examples at:
-        # https://github.com/basler/pypylon/tree/master/samples
+        """ Grab image and return image data.
+        
+        Returns:
+            :class:`np.ndarray`: 2D array of image data.
+         """
 
         n_img = 1
         try:
@@ -185,12 +216,32 @@ class Basler():
             self.cam.Height.SetValue(nH)
 
     def getDimensions(self):
+        """ Get dimensions of the camera image. Can be changed by changing
+        :attr:`resolution`.
+
+        Returns:
+            int,int: Width and height of image
+        """
         return self.cam.Width.GetValue(),self.cam.Height.GetValue()
 
 class BaslerView(QWidget):
     """
-    Widget for showing image from the Basler camera.
-    It should be openned from BaslerGUI.
+    **Bases:** :class:`QWidget`
+
+    Separate window showing video output from the Basler camera. Typically
+    opened from :class:`BaslerGUI` which directly sets new image to
+    :attr:`img`. It employs ``pyqtgraph`` for imaging.
+
+    Args:
+        standalone (bool): Is this widget a standalone window (True) or part of
+            some other widget (False). Defaults to True.
+        closeSignal: This signal emits when this window is closed so, for
+            example, streaming can be automatically stopped by catching this signal.
+            Defaults to None.
+
+    Attributes:
+        img (:class:`MyImageItem`): New image (:class:`np.ndarray`) can be set
+            using command `img.setImage(my_img)`.
     """
 
 
@@ -243,14 +294,15 @@ class Thread(QThread):
     **Bases:** :class:`QThread`
 
     Object used to grab images from the **Basler** camera. It is optimized to be
-    run in a separate thread. After successfull grabbing signal :attr:`~newImg`
-    emits the image.
+    run in a separate thread. After successfull grabbing signal :attr:`newImg`
+    emits the image which is caught by :func:`Basler.setImg`.
 
     Args:
         basler (:class:`Basler`): Pointer to camera instance
-        sigStop (:class:`pyqtSignal`): Signal used to stop streaming (exit while loop)
-        sigPause (:class:`pyqtSignal`): Signal used to pause streaming (do not exit while
-            loop but stop grabbing)
+        sigStop (:class:`pyqtSignal`): Signal used to stop streaming (exit while
+            loop)
+        sigPause (:class:`pyqtSignal`): Signal used to pause streaming (do not
+            exit while loop but stop grabbing)
 
     Attributes:
         newImg (:class:`pyqtSignal`): Emits :class:`np.ndarray` after successfull
@@ -274,8 +326,8 @@ class Thread(QThread):
         self.streaming = False
 
     def run(self):
-        """ Reimplementation of :func:`~run`. It grabs images calling
-        :func:`~Basler.grabImg` and emits :attr:`~newImg`. """
+        """ Reimplementation of :func:`run`. It grabs images calling
+        :func:`Basler.grabImg` and emits :attr:`newImg`. """
         while self.streaming:
             if not self.pause:
                 img = self.Basler.grabImg()
@@ -293,24 +345,33 @@ class BaslerGUI(QWidget):
 
     PyQt5 does not support interference to the GUI from any other but the `main`
     thread. Therefore, video (grab&display) cannot fully run in a separate
-    thread. Instead, signal from the separate thread emits pointer to grabbed
-    image which is then displayed in the `main` thread.
+    thread. Instead, signal (:attr:`Thread.newImg`) from the separate thread
+    (:class:`Thread`) emits pointer to grabbed image which is then displayed in
+    the `main` thread (via :func:`setImg`).
 
     Flow of the application is limitted only by the speed of plotting which
     **must** be done in the main thread. See also `this
     <https://groups.google.com/g/pyqtgraph/c/FSjIaxYfYKQ>`_ for possible speed
     up.
 
+    **Resolution:**
+
+    In order to prevent exceptions during Basler resolution changes, streaming
+    must be paused first (:attr:`signals_sig2` emits), then change
+    :attr:`Basler.resolution` and continue streaming.
+
     Args:
         parentCloseSignal (:class:`pyqtSignal`,optional): This signal is connected to
-            :func:`~parrentClose`. Defaults to None.
+            :func:`parrentClose`. Defaults to None.
         messageSignal (:class:`pyqtSignal`,optional): Handle of signal which is connected to
-            :func:`~BaslerMainWindow.messageCallback` so any message emitted by this
+            :func:`BaslerMainWindow.messageCallback` so any message emitted by this
             signal can be shown in the statusbar. Defaults to None.
 
     Attributes:
         viewWindow: Instance of :class:`BaslerView`. This is a separate window
             which shows grabbed images.
+        signals_sig1: Emit implies stop of :class:`Thread`
+        signals_sig2: Emit toggle pause of :class:`Thread`
 
     **Steps:**
 
@@ -429,7 +490,7 @@ class BaslerGUI(QWidget):
         self.__toggleConnection(self.Basler.connected)
 
     def __newViewWindow(self):
-        """ Init new :attr:`~viewWindow` of :class:`BaslerView` class. """
+        """ Init new :attr:`viewWindow` of :class:`BaslerView` class. """
         viewWindow = BaslerView(closeSignal=self.signals.closeWindow)
         # This window has to be shown and then potentially hidden. Error with
         # timers and different threads is otherwise given.
@@ -505,9 +566,9 @@ class BaslerGUI(QWidget):
 
     def startStream(self):
         """ Start streaming. This function opens separate window
-        :attr:`~viewWindow` (if not opened yet) and starts new thread
-        :class:`Thread` which signal :attr:`~Thread.newImg` is connected to
-        :func:`~setImage`. """
+        :attr:`viewWindow` (if not opened yet) and starts new thread
+        :class:`Thread` which signal :attr:`Thread.newImg` is connected to
+        :func:`setImage`. """
 
         if not self.streaming:
             self.streaming = True
@@ -525,9 +586,9 @@ class BaslerGUI(QWidget):
 
     @pyqtSlot(np.ndarray)
     def setImage(self,image):
-        """ Function is connected to :attr:`~Thread.newImg` which emits when the
+        """ Function is connected to :attr:`Thread.newImg` which emits when the
         :class:`Thread` grabs new image. This function also calculates `fps`
-        which is displayed as a title of the :attr:`~viewWindow`. """
+        which is displayed as a title of the :attr:`viewWindow`. """
         nowT = pg.ptime.time()
         dt = nowT - self.lastT
         self.lastT = nowT
@@ -541,7 +602,7 @@ class BaslerGUI(QWidget):
         self.viewWindow.img.setImage(image)
 
     def stopStream(self):
-        """ Stop streaming. :attr:`~signals_sig1` emits so :class:`Thread` knows
+        """ Stop streaming. :attr:`signals_sig1` emits so :class:`Thread` knows
         it should stop grabbing. """
         if self.streaming:
             self.streaming = False
@@ -550,8 +611,8 @@ class BaslerGUI(QWidget):
             al.emitMsg(self.messageSignal,'Streaming stopped')
 
     def showImg(self):
-        """ Show image in the :attr:`~viewWindow`.
-        Called, e.g., by `btnGrabImg` or by :func:`~stream` in a separate
+        """ Show image in the :attr:`viewWindow`.
+        Called, e.g., by `btnGrabImg` or by :func:`stream` in a separate
         thread.
         """
         # First, show window if not visible
@@ -607,13 +668,13 @@ class BaslerMainWindow(QMainWindow):
         self.show()
 
     def statusbarShow(self,msg):
-        """ Function connected to :attr:`~signals_message` to display ``msg`` in
+        """ Function connected to :attr:`signals_message` to display ``msg`` in
         the statusbar. """
         self.statusbar.showMessage(msg)
 
     def closeEvent(self,*_):
         """ Reimplementation of `closeEvent` function so
-        :attr:`~signals_closeParent` can emit when this main window is closed.
+        :attr:`signals_closeParent` can emit when this main window is closed.
         """
         self.signals.closeParent.emit()
 

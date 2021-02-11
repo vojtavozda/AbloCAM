@@ -8,6 +8,7 @@ This is test number X7
    :maxdepth: 2
    
    docs
+   ablolib
    ablomic
    xeryon
    basler

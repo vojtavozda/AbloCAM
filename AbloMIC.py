@@ -3,7 +3,7 @@ AbloMIC
 =======
 
 Module used to build GUI for microscope control. Optimized for executing as
-`main` file (see :func:`~main`). It opens main window (:class:`MicMainWindow`)
+`main` file (see :func:`main`). It opens main window (:class:`MicMainWindow`)
 which contains :class:`MicGUI` as a central widget which encapsulates all other
 widgets imported from different modules. The application is built on ``PyQt5``.
 
@@ -72,7 +72,7 @@ class MicGUI(QWidget):
             forwarded to other widgets and motor instances so clean exit is ensured
             when :class:`MicMainWindow` is closed. Defaults to None.
         messageSignal (:class:`pyqtSignal`): Handle of signal which is connected
-            to :func:`~MicMainWindow.messageCallback` so any message emitted by this
+            to :func:`MicMainWindow.messageCallback` so any message emitted by this
             signal can be shown in the statusbar. Defaults to None.
 
     """
@@ -182,11 +182,11 @@ class MicMainWindow(QMainWindow):
 
     Main window for microscope control. It is useful for initialization of
     `menubar` and `statusbar` which are not parts of :class:`QWidget`.
-    Reimplementation of :func:`~eventFilter` also makes catching of all key
+    Reimplementation of :func:`eventFilter` also makes catching of all key
     presses possible.
 
     Attributes:
-        signals_message: Connected to :func:`~messageCallback` to show
+        signals_message: Connected to :func:`messageCallback` to show
             message emitted by childrens. In order to show a message in the
             `statusbar` just forward pointer of this signal as an argument to a
             custom function end `emit` message as `mySignal.emit("my message")`.
@@ -281,17 +281,17 @@ class MicMainWindow(QMainWindow):
         """
         Todo:
             This method opens window with log file. Individual logs are pushed
-            from :func:`~messageCallback`.
+            from :func:`messageCallback`.
         """
         al.printW("MicMainWindow::showLogFile -> Not done yet!")
 
     def messageCallback(self,msg):
-        """ Print `msg` to statusbar. Connected to :attr:`~signals_message`.
+        """ Print `msg` to statusbar. Connected to :attr:`signals_message`.
         Timestamp is added automatically.
 
         Todo:
             Messages should be looged into a logfile which can be viewed using
-            function :func:`~showLogFile`.
+            function :func:`showLogFile`.
 
         Args:
             msg (str): Message to be printed.
@@ -303,7 +303,7 @@ class MicMainWindow(QMainWindow):
 
     def closeEvent(self,*_):
         """ Reimplementation of `closeEvent` is used to emit
-        :attr:`~signals_closeParent`.
+        :attr:`signals_closeParent`.
         """
         print("MicMainWindow::closeEvent")
         self.signals.closeParent.emit()
