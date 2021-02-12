@@ -5,6 +5,19 @@ Xeryon motor control
 Module to work with **Xeryon** motors. It employs ``Xeryon`` library (`link
 <https://xeryon.com/software/xeryon-python-library/>`_) provided by the *Xeryon
 company*.
+
+This module can be run separately, it opens :func:`main` and
+:class:`XeryonMainWindow`  which connects Xeryon motors of :class:`Motor`.
+Examples of widgets are encapsulated in :class:`XeryonGUI` which is set as a
+central widget of the :class:`XeryonMainWindow`.
+
+Communication between :class:`Motor` and widgets is intermediated by ``PyQt5``
+signals like :class:`LED_signals` etc.
+
+A typical usage of this module contains following steps:
+    1. Init :class:`Motor` (it communicates with the ``Xeryon`` library).
+    2. Create widgets which require pointers to Xeryon motors (i.e. :class:`StatusGUI` or :class:`XYWidget`).
+    3. Connect motors (:func:`Motor.connect`).
 """
 
 # TODO =========================================================================
@@ -55,13 +68,14 @@ def get_serial_port(serial_number):
 
 class LED_signals(QObject):
     """
-    Signals for LEDs
-    ================
+    Signals for LEDs of :class:`pyqtSignal`. Used by :class:`xeryon` which emits
+    signals according to current action. These might be connected to
+    :class:`LedWidget.QLED`, for example in :class:`StatusGUI`.
 
-    Arguments:
-        arg1 [bool]: turn LED on/off
-        arg2 [str]:  LED color
-        arg3 [str]:  tooltip
+    Args:
+        arg1 (bool): turn LED on/off
+        arg2 (str):  LED color (see :class:`LedWidget.QLED`)
+        arg3 (str):  tooltip
     """
     connected = pyqtSignal(bool,str,str)    # stage is connected or not
     findIndex = pyqtSignal(bool,str,str)    # index was found or not
@@ -69,39 +83,49 @@ class LED_signals(QObject):
     LLIM = pyqtSignal(bool,str,str)         # stage is at its low limit
     HLIM = pyqtSignal(bool,str,str)         # stage is at its high limit
 
-class Motor:
+class Motor():
     """
-    Xeryon motor
-    ============
+    Classed used to control **Xeryon motors**, it mediates communication with
+    the ``Xeryon`` library.
 
-    Arguments
-    ---------
-    axis_letter - letter connected with a particular motor
-                - used in configuration file read by Xeryon library
-    closeSignal - disconnect stage if this signal emits
-                - used when QMainWindow is closed, for example
+    **Dynamic variables:** Motor employs several vars of
+    :class:`ablolib.DynVar`. They should be accessed exclusively via
+    :func:`ablolib.DynVar.set` and :func:`ablolib.DynVar.get` methods. The
+    `set()` method emits signal which can be connected to a slot function (i.e.
+    read :attr:`EPOS`).
 
-    Dynamic variables
-    -----------------
-    Motor has several dynamic variables of DynVar(QObject) class. They should be
-    accessed exclusively via `set()` and `get()` methods. The `set()` method
-    emits signal which can be connected to a slot function:
-    `xeryon_dynvar.signal.connect(fcn)`.
+    **Timer:** The ``Xeryon`` library does not use ``PyQt5`` signals so there is
+    no way to automatically catch change of motor status (like :attr:`EPOS`).
+    Therefore, :attr:`timer` starts upon :func:`connect` and after runout it
+    periodically reads motor status via :func:`updateData`. **TODO:** This
+    spends lots of time which results in decreased application smoothness.
 
-    DPOS        - desired position written to the encoder
-    EPOS        - actual position returned from the encoder
-    speed       - speed of the motor
-    stepSize    - size of a single step (used in `self.step()` method)
+    Args:
+        axis_letter (str): Letter connected with a particular motor. Used in
+            configuration file read by ``Xeryon`` library. The file contains
+            information of the motor serial number so communication port can be
+            obtain using :func:`get_serial_port` function.
+        closeSignal: Signal which is here connected to :func:`disconnect` so it
+            is automatically disconnected when this signal emits. Recommended.
+            Defaults to None.
+        speed (int): Speed. Defaults to 100.
+        units: Units used by the motor. Defaults to `mm`.
+        stepSize (int): Step size. Defaults to 1.
 
-    LEDs
-    ----
-    This class emits several signals (`LED_signals`) describing its status.
-    These signals can be easily connected to status LEDs or some message alerts.
-    This is done in XeryonStatusGUI widget.
+    Attributes:
+        connected (bool): Connection status
+        LedSig (:class:`LED_signals`): Emits signals according to the motor
+            status.
+        DPOS (:class:`ablolib.DynVar`): Desired position written to the encoder.
+        EPOS (:class:`ablolib.DynVar`): Actual position returned from the
+            encoder. 
+        speed (:class:`ablolib.DynVar`): Speed of the motor
+        stepSize (:class:`ablolib.DynVar`): Size of a single step (see
+            :func:`step` method).
+        limits ([int,int]): Limits of the motor. Read from the config file.
+        timer (:class:`QTimer`): Connected to :func:`updateData`.
+        threadpool (:class:`QThreadPool`): Used within :func:`findIndex`.
 
-    Known issues
-    ------------
-    [x] LED findIndex does not change back to green after finding index.
     """
 
     def __init__(self,axis_letter='',closeSignal=None,units=xe.Units.mm,

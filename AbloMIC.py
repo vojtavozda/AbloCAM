@@ -10,12 +10,16 @@ widgets imported from different modules. The application is built on ``PyQt5``.
 The microscope employs **Xeryon** and **Navitar** motors for precise movements
 and **Basler** camera for grabbing pictures and video.
 
+Todo:
+    Microscope should have an autofocus feature. This can be done, for example,
+    by **OpenCV** and blur detection as described `here
+    <https://www.pyimagesearch.com/2015/09/07/blur-detection-with-opencv/>`_.
 
 """
 
 
 # TODO =========================================================================
-# ! [ ] Get started with readtheocs.io and create documentation
+# @ [x] Get started with readtheocs.io and create documentation
 # ! [ ] How to speed up PyQt5 ???
 # $ [.] Add Z-movements
 # @   [x] Create new file navitary.py
