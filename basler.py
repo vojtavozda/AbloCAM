@@ -375,8 +375,8 @@ class BaslerGUI(QWidget):
 
     **Steps:**
 
-        1. Init Basler camera (:class:`Basler`)
-        2. Create GUI (buttons etc.)
+        1.  Init Basler camera (:class:`Basler`)
+        2.  Create GUI (buttons etc.)
     """
 
     def __init__(self,parentCloseSignal=None,messageSignal=None):

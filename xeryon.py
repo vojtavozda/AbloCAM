@@ -15,9 +15,10 @@ Communication between :class:`Motor` and widgets is intermediated by ``PyQt5``
 signals like :class:`LED_signals` etc.
 
 A typical usage of this module contains following steps:
-    1. Init :class:`Motor` (it communicates with the ``Xeryon`` library).
-    2. Create widgets which require pointers to Xeryon motors (i.e. :class:`StatusGUI` or :class:`XYWidget`).
-    3. Connect motors (:func:`Motor.connect`).
+    1.  Init :class:`Motor` (it communicates with the ``Xeryon`` library).
+    2.  Create widgets which require pointers to Xeryon motors (i.e.
+        :class:`StatusGUI` or :class:`XYWidget`).
+    3.  Connect motors (:func:`Motor.connect`).
 """
 
 # TODO =========================================================================

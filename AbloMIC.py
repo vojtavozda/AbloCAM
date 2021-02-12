@@ -318,9 +318,9 @@ def main():
 
     **Steps:**
 
-        1. Set style sheet from :download:`ablo.css <../ablo.css>`
-        2. Init main window :class:`MicMainWindow()`
-        3. Start application and ensure clean exit
+        1.  Set style sheet from :download:`ablo.css <../ablo.css>`
+        2.  Init main window :class:`MicMainWindow()`
+        3.  Start application and ensure clean exit
     """
     app = QApplication(sys.argv)
 
