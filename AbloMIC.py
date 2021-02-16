@@ -25,7 +25,7 @@ Todo:
 # @   [x] Create new file navitary.py
 # !   [.] Build a small GUI for Navitar motors
 # @   [x] Add Xeryon Z-stage (the same GUI as for Navitar?)
-# $ [ ] Add settings for Basler camera (exposure time, max fps)
+# @ [x] Add settings for Basler camera (exposure time, max fps)
 # @ [x] Improve GUI for rotational stage
 # $ [ ] Define points (display on XY widget, two points -> rotate to horizontal)
 # $ [ ] Define sample dimensions -> Show sample on XY widget, define sample coords

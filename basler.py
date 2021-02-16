@@ -12,12 +12,23 @@ If run separately, :func:`main` is executed. It inits :class:`BaslerMainWindow`
 which sets :class:`BaslerGUI` as a central widget. This widget which holds all
 buttons and sliders. It also calls :class:`Basler` which inits the camera using 
 ``pypylon`` library. Video from the camera is shown in a standalone window
-:class:`BaslerView`. A relatively fast video stream is reached by grabbing
+:class:`PgView`. A relatively fast video stream is reached by grabbing
 images in a separate thread run by :class:`Thread`.
 
 If this module is a part of larger project, :class:`BaslerGUI` can be implemented
 as a widget into a custom window.
+
+Todo:
+    **Video speed:** Example for rapid video grabbing is `here
+    <https://github.com/basler/pypylon/blob/master/samples/opencv.py>`_. This
+    example runs smoothly with `pip3 install opencv-python` but there is a
+    conflict with ``PyQt5`` which cannot be loaded. The conflict disappears
+    after instelling headless opencv ``pip3 install opencv-python-headless` but
+    example above stops working :/
 """
+
+# TODO: Try to use QLabel and setPixmap to display grabbed image (combine with
+# $ the pylon example)
 
 
 import sys
@@ -39,6 +50,9 @@ from pypylon import pylon   # Camera communication
 from PIL import Image       # Pillow library for image operations
 
 import ablolib as al
+
+# import cv2
+
 
 
 class MyImageItem(pg.ImageItem):
@@ -196,6 +210,22 @@ class Basler():
             al.emitMsg(self.messageSignal,msg)
             return np.random.normal(size=(100,100))
 
+    def grabVideoInit(self):
+        self.cam.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
+        self.converter = pylon.ImageFormatConverter()
+        self.converter.OutputPixelFormat = pylon.PixelType_BGR8packed
+        self.converter.OutputBitAlignment = pylon.OutputBitAlignment_MsbAligned
+
+    def grabVideo(self):
+        grabResult = self.cam.RetrieveResult(
+            5000, pylon.TimeoutHandling_ThrowException)
+
+        if grabResult.GrabSucceeded():
+            image = self.converter.Convert(grabResult)
+            img = image.GetArray()
+            return img
+        grabResult.Release()
+
     def __setExposureT(self,*_):
         self.cam.ExposureTime.SetValue(self.exposureT.get())
 
@@ -224,7 +254,17 @@ class Basler():
         """
         return self.cam.Width.GetValue(),self.cam.Height.GetValue()
 
-class BaslerView(QWidget):
+    def getDeviceInfo(self):
+        """ Get device information """
+        info = self.cam.GetDeviceInfo()
+        # print(al.printAttributes(info))
+        txt = f"{al.bold('===== Basler camera information =====')}\n"
+        txt += f"{al.bold('Vendor name:')} {info.GetVendorName()}\n"
+        txt += f"{al.bold('Model name:')} {info.GetModelName()}\n"
+        txt += f"{al.bold('Serial number:')} {info.GetSerialNumber()}\n"
+        print(txt)
+
+class PgView(QWidget):
     """
     **Bases:** :class:`QWidget`
 
@@ -249,7 +289,7 @@ class BaslerView(QWidget):
         super().__init__()
 
         # Structure ────────────────────────────────────────────────────────────
-        # BaslerView (self) ├
+        # PgView (self) ├
         # └── layout
         #     └── pgWidget
         #         └── viewbox
@@ -328,11 +368,15 @@ class Thread(QThread):
     def run(self):
         """ Reimplementation of :func:`run`. It grabs images calling
         :func:`Basler.grabImg` and emits :attr:`newImg`. """
+        # self.Basler.grabVideoInit()
         while self.streaming:
             if not self.pause:
                 img = self.Basler.grabImg()
+                # img = self.Basler.grabVideo()
                 if img is not None:
+                    # img = cv2.resize(img,dsize=(800,632),interpolation=cv2.INTER_CUBIC)
                     self.newImg.emit(img)
+        self.Basler.cam.StopGrabbing()
 
 class BaslerGUI(QWidget):
     """
@@ -368,7 +412,7 @@ class BaslerGUI(QWidget):
             signal can be shown in the statusbar. Defaults to None.
 
     Attributes:
-        viewWindow: Instance of :class:`BaslerView`. This is a separate window
+        viewWindow: Instance of :class:`PgView`. This is a separate window
             which shows grabbed images.
         signals_sig1: Emit implies stop of :class:`Thread`
         signals_sig2: Emit toggle pause of :class:`Thread`
@@ -436,7 +480,7 @@ class BaslerGUI(QWidget):
         # Add slider to change exposure time
         self.sldExp = QSlider(Qt.Horizontal,self)
         self.sldExp.setCursor(Qt.PointingHandCursor)
-        self.sldExp.setValue(self.Basler.exposureT.get())
+        self.sldExp.setValue(int(self.Basler.exposureT.get()))
         self.sldExp.setToolTip('Change exposure time')
         self.sldExp.valueChanged.connect(self.__sldExpValueChanged)
         self.sldExp.setMinimum(0)
@@ -490,8 +534,8 @@ class BaslerGUI(QWidget):
         self.__toggleConnection(self.Basler.connected)
 
     def __newViewWindow(self):
-        """ Init new :attr:`viewWindow` of :class:`BaslerView` class. """
-        viewWindow = BaslerView(closeSignal=self.signals.closeWindow)
+        """ Init new :attr:`viewWindow` of :class:`PgView` class. """
+        viewWindow = PgView(closeSignal=self.signals.closeWindow)
         # This window has to be shown and then potentially hidden. Error with
         # timers and different threads is otherwise given.
         viewWindow.show()
@@ -507,13 +551,30 @@ class BaslerGUI(QWidget):
             self.saveImg()
 
     def __sldExpValueChanged(self,value):
-        # TODO: Need to map value from slider limits to camera limits:
-        # $ print(self.cam.ExposureTime.Min)
-        # $ print(self.cam.ExposureTime.Max)
-        pass
+        """ Set new exposure time if slider `sldExp` moved by user """
+        if self.sldExp.hasFocus():
+            # Calculate new exposure time according to slider position
+            y1 = self.Basler.cam.ExposureTime.Min   # minimum
+            y2 = self.Basler.cam.ExposureTime.Max   # maximum
+            # Exponential function is used to calculate exposure time
+            # Lower value of base means there is more option at higher values
+            base = 1.15
+            y = (y2-y1)/(pow(base,100)-1)*(pow(base,value)-1)+y1
+            self.Basler.exposureT.set(y)
+            # Generate text which appears in the exposure label
+            txt = "Exposure: "
+            if y<1e3:
+                txt += f"{int(y)} us"
+            elif y<1e4:
+                txt += f"{int(y/1e2)/10} ms"
+            elif y < 1e6:
+                txt += f"{int(y/1e3)} ms"
+            else:
+                txt += f"{int(y/1e5)/10} s"
+            self.lblExp.setText(txt)
 
     def __sldResValueChanged(self,value):
-        """ Set new resolution if slider sldRes moved by user """
+        """ Set new resolution if slider `sldRes` moved by user """
         if self.sldRes.hasFocus():
             if self.streaming:
                 self.signals.sig2.emit()    # Pause streaming

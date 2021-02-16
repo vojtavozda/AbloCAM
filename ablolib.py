@@ -13,6 +13,25 @@ from PyQt5.QtWidgets import QWidget, QStyle, QSlider
 
 import pyqtgraph as pg
 
+# Library to find information about devices connected to serial ports
+from serial.tools import list_ports
+
+class bcolors:
+    """ Definition of colors used to color terminal output. """
+    HEADER = '\033[95m'     # Pink
+    OKBLUE = '\033[94m'     # Blue
+    OKCYAN = '\033[96m'     # Cyan
+    OKGREEN = '\033[92m'    # Green
+    WARNING = '\033[93m'    # Yellow
+    FAIL = '\033[91m'       # Red
+    ENDC = '\033[0m'        # White
+    BOLD = '\033[1m'        # Bold
+    UNDERLINE = '\033[4m'   # Underline
+
+def bold(string):
+    """ Format string to bold """
+    return bcolors.BOLD+string+bcolors.ENDC
+
 class DynVar(QObject):
     """
     Dynamic variable which can be accessed by :func:`set` and :func:`get`
@@ -107,6 +126,45 @@ def printAttributes(obj):
             except:
                 print(bcolors.BOLD,atrbt+":",bcolors.ENDC,eval('obj.'+atrbt))
 
+def getSerialPort(serialNumber=None):
+    """ Find serial port corresponding to given serial number.
+
+    Usage:
+        Call without argument (`getSerialPort()`) to list connected serial
+        devices.
+
+    Warning:
+        This function uses ``serial.tools`` lists only serial devices, not USB
+        in general!
+    """
+
+    device_list = list_ports.comports()
+
+    if serialNumber is None:
+        # Print all devices
+        for i,device in enumerate(device_list):
+            print(bcolors.BOLD+f"========device {i} =========="+bcolors.ENDC)
+            print(bcolors.BOLD+"description:"+bcolors.ENDC,device.description)
+            print(bcolors.BOLD+"device:"+bcolors.ENDC,device.device)
+            print(bcolors.BOLD+"device_path:"+bcolors.ENDC,device.device_path) # does not work on windows
+            print(bcolors.BOLD+"hwid:"+bcolors.ENDC,device.hwid)
+            print(bcolors.BOLD+"interface:"+bcolors.ENDC,device.interface)
+            print(bcolors.BOLD+"location:"+bcolors.ENDC,device.location)
+            print(bcolors.BOLD+"manufacturer:"+bcolors.ENDC,device.manufacturer)
+            print(bcolors.BOLD+"name:"+bcolors.ENDC,device.name)
+            print(bcolors.BOLD+"pid:"+bcolors.ENDC,device.pid)
+            print(bcolors.BOLD+"product:"+bcolors.ENDC,device.product)
+            print(bcolors.BOLD+"serial_number:"+bcolors.ENDC,device.serial_number)
+            print(bcolors.BOLD+"vid:"+bcolors.ENDC,device.vid)
+
+    else:
+        # Find device with given serial number
+        for device in device_list:
+            if device.serial_number == serialNumber:
+                return device.device
+        printE(f"Device with serial number '{serialNumber}' not found!")
+    return None
+
 def unicode(string):
     """ Put string (like "&larr;") into ``html`` code.
     """
@@ -171,19 +229,6 @@ def printException(ex):
     message = template.format(type(ex).__name__, ex.args)
     print(message)
 
-class bcolors:
-    """ Definition of colors used to color terminal output. """
-    HEADER = '\033[95m'     # Pink
-    OKBLUE = '\033[94m'     # Blue
-    OKCYAN = '\033[96m'     # Cyan
-    OKGREEN = '\033[92m'    # Green
-    WARNING = '\033[93m'    # Yellow
-    FAIL = '\033[91m'       # Red
-    ENDC = '\033[0m'        # White
-    BOLD = '\033[1m'        # Bold
-    UNDERLINE = '\033[4m'   # Underline
-
-
 def standardIcon(icon):
 
     return QWidget().style().standardIcon(getattr(QStyle,icon))
@@ -193,7 +238,6 @@ def emitMsg(signal,msg):
         signal.emit(msg)
     except:
         pass
-
 
 class DoubleSlider(QSlider):
     """ NOT USED AT THE TIME """
@@ -227,7 +271,6 @@ class DoubleSlider(QSlider):
 
     def setValue(self, value):
         super(DoubleSlider, self).setValue(int(value * self._multi))
-
 
 class QDoubleSlider(QSlider):
     """
