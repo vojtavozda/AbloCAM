@@ -30,14 +30,15 @@ Todo:
 # TODO: Try to use QLabel and setPixmap to display grabbed image (combine with
 # $ the pylon example)
 
-
+import os
 import sys
 import time
 import numpy as np
 from PyQt5.QtCore import (Qt, QThreadPool, QObject, QRunnable, pyqtSlot,
     pyqtSignal, QThread)
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
-    QHBoxLayout, QVBoxLayout, QStyle, QLabel, QSlider, QComboBox)
+    QHBoxLayout, QVBoxLayout, QStyle, QLabel, QSlider, QComboBox, QGridLayout,
+    QLineEdit, QCheckBox, QFileDialog, QMessageBox)
 
 from PyQt5.QtGui import QPixmap, QImage
 
@@ -461,6 +462,125 @@ class Thread(QThread):
                     
         self.Basler.cam.StopGrabbing()
 
+class SaveSettings(QMainWindow):
+    """ Window for setting option of saving image """
+
+    def __init__(self):
+        super().__init__()
+
+        self.path = os.getcwd()
+        self.autoInc = True
+        self.counter = 0
+        self.filename_core = 'image'
+        self.ext = '.png'
+        self.filename = self.composeFilename()
+
+        grid = QGridLayout()
+
+        lblDir = QLabel('Directory:')
+        self.btnDir = QPushButton('...')
+        self.btnDir.clicked.connect(self.__selectDirectory)
+
+        lblName = QLabel('File name:')
+        qleName = QLineEdit()
+        qleName.setText(self.filename_core)
+
+        lblAInc = QLabel('Auto increment:')
+        chbAInc = QCheckBox()
+        chbAInc.setChecked(self.autoInc)
+        chbAInc.stateChanged.connect(self.__toggleAutoInc)
+        lblNext = QLabel('Next value:')
+        self.qleVal = QLineEdit()
+        self.qleVal.setText(str(self.counter))
+        hboxAInc = QHBoxLayout()
+        hboxAInc.addWidget(chbAInc)
+        hboxAInc.addWidget(lblNext)
+        hboxAInc.addWidget(self.qleVal)
+
+        lblExt = QLabel('Extension:')
+        self.cmbExt = QComboBox()
+        extensions = ['.jpg','.png']
+        self.cmbExt.addItems(extensions)
+        self.cmbExt.setCurrentIndex(extensions.index(self.ext))
+
+        lblFileName = QLabel('Full name:')
+        self.qleFileName = QLineEdit()
+        self.qleFileName.setEnabled(False)
+
+        lblRes = QLabel('Resolution:')
+        lblrrr = QLabel('Full (mám to vůbec měnit?)')
+
+        grid.addWidget(lblDir,0,0)
+        grid.addWidget(self.btnDir,0,1)
+        grid.addWidget(lblAInc,1,0)
+        grid.addLayout(hboxAInc,1,1)
+        grid.addWidget(lblName,2,0)
+        grid.addWidget(qleName,2,1)
+        grid.addWidget(lblExt,3,0)
+        grid.addWidget(self.cmbExt,3,1)
+        grid.addWidget(lblFileName,4,0)
+        grid.addWidget(self.qleFileName,4,1)
+        grid.addWidget(lblRes,5,0)
+        grid.addWidget(lblrrr,5,1)
+
+        btnDone = QPushButton('Done')
+        btnDone.setIcon(al.standardIcon('SP_DialogApplyButton'))
+        hbox = QHBoxLayout()
+        hbox.addStretch()
+        hbox.addWidget(btnDone)
+
+        vbox = QVBoxLayout()
+        vbox.addLayout(grid)
+        vbox.addStretch()
+        vbox.addLayout(hbox)
+
+        container = QWidget()
+        container.setLayout(vbox)
+
+        self.setCentralWidget(container)
+
+        self.setGeometry(200,200,300,300)
+        self.setWindowTitle('Save settings')
+        self.show()
+
+        self.__selectDirectory(path='asdfklsadjfklajwef oajfoifjaa;ewjf wea;fjwefwea')
+        self.fullname = self.composeFullname()
+
+    def composeFilename(self):
+        if self.autoInc:
+            # TODO: Add leading zeros
+            filename = str(self.filename_core)+'_'+str(self.counter)+str(self.ext)
+        else:
+            filename = str(self.filename_core)+str(self.ext)
+        return filename
+
+    def composeFullname(self):
+        # TODO: This function should be called after every change of the name
+        self.filename = self.composeFilename()
+        # TODO: Signal should be emitted here and filename set at parent's button
+        self.qleFileName.setText(self.filename)
+
+        return self.path + '/' + self.filename
+
+    def __toggleAutoInc(self,value):
+        self.autoInc = bool(value)
+        self.qleVal.setEnabled(self.autoInc)
+        self.composeFullname()
+
+    def __selectDirectory(self,*args,path=None):
+
+        if path is None:
+            path = QFileDialog.getExistingDirectory(self,'Select directory')
+        
+        if path:
+            self.path = path
+            btntxt = self.path
+            if len(btntxt) > 30:
+                btntxt = '...'+btntxt[-30:]
+            self.btnDir.setText(btntxt)
+            self.btnDir.setToolTip(self.path)
+
+
 class BaslerGUI(QWidget):
     """
     **Bases:** :class:`QWidget`
@@ -525,6 +645,9 @@ class BaslerGUI(QWidget):
 
         self.signals = al.Signals()
 
+        self.saveSettings = SaveSettings()
+        self.saveSettings.hide()
+
         # Initiate Basler camera -----------------------------------------------
         self.Basler = Basler(
             connectionSignal=self.signals.connection,
@@ -532,31 +655,39 @@ class BaslerGUI(QWidget):
         self.signals.connection.connect(self.__toggleConnection)
 
         # Buttons --------------------------------------------------------------
-        self.btnConnect = QPushButton('Connect',self)
-        self.btnGrabImg = QPushButton('GrabImg',self)
-        self.btnStream  = QPushButton('Stream' ,self)
-        self.btnSaveImg = QPushButton('Save'   ,self)
+        self.btnConnect      = QPushButton('Connect',self)
+        self.btnGrabImg      = QPushButton('GrabImg',self)
+        self.btnStream       = QPushButton('Stream' ,self)
+        self.btnSaveImg      = QPushButton('Save'   ,self)
+        self.btnSaveSettings = QPushButton(''       ,self)
+        self.btnSaveSettings.setMaximumWidth(30)
 
         self.btnConnect.setObjectName('btn_connect')
         self.btnGrabImg.setObjectName('btn_grab')
         self.btnStream.setObjectName('btn_stream')
         self.btnSaveImg.setObjectName('btn_save')
+        self.btnSaveSettings.setObjectName('btn_saveSettings')
 
         self.btnConnect.setStatusTip('Connect Basler camera')
         self.btnGrabImg.setStatusTip('Grab one image')
         self.btnStream.setStatusTip('Start live video stream')
         self.btnSaveImg.setStatusTip('Save image')
+        self.btnSaveSettings.setStatusTip('Open settings for saving image')
 
         self.btnConnect.setCursor(Qt.PointingHandCursor)
         self.btnGrabImg.setCursor(Qt.PointingHandCursor)
         self.btnStream.setCursor(Qt.PointingHandCursor)
         self.btnSaveImg.setCursor(Qt.PointingHandCursor)
+        self.btnSaveSettings.setCursor(Qt.PointingHandCursor)
 
         self.__toggle_btnStream()
         self.btnGrabImg.setIcon(qta.icon('fa.photo'))
-        self.btnGrabImg.clicked.connect(self.__btnClicked)
         self.btnSaveImg.setIcon(al.standardIcon('SP_DriveFDIcon'))
+        self.btnSaveSettings.setIcon(qta.icon('fa.cog'))
+
+        self.btnGrabImg.clicked.connect(self.__btnClicked)
         self.btnSaveImg.clicked.connect(self.__btnClicked)
+        self.btnSaveSettings.clicked.connect(self.__btnClicked)
 
         # Exposure settings ----------------------------------------------------
         # Add label
@@ -593,6 +724,7 @@ class BaslerGUI(QWidget):
 
         hbox2 = QHBoxLayout()
         hbox2.addWidget(self.btnSaveImg)
+        hbox2.addWidget(self.btnSaveSettings)
 
         hbox3 = QHBoxLayout()
         hbox3.addWidget(self.lblExp)
@@ -635,6 +767,9 @@ class BaslerGUI(QWidget):
             self.showImg()
         elif sender.objectName() == 'btn_save':
             self.saveImg()
+        elif sender.objectName() == 'btn_saveSettings':
+            if not self.saveSettings.isVisible():
+                self.saveSettings.show()
 
     def __sldExpValueChanged(self,value):
         """ Set new exposure time if slider `sldExp` moved by user """
@@ -843,7 +978,8 @@ def main():
     :class:`BaslerMainWindow` and ensures clean exit.
     """
     app = QApplication(sys.argv)
-    handle = BaslerMainWindow()
+    # handle = BaslerMainWindow()
+    handle = SaveSettings()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

@@ -48,7 +48,7 @@ from PyQt5.QtGui import QPixmap, QIcon
 
 from ablolib import Signals
 
-import qtawesome as qta
+import qtawesome as qta     # qta-browser
 
 import ablolib as al
 import xeryon
