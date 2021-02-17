@@ -37,7 +37,7 @@ import numpy as np
 from PyQt5.QtCore import (Qt, QThreadPool, QObject, QRunnable, pyqtSlot,
     pyqtSignal, QThread)
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
-    QHBoxLayout, QVBoxLayout, QStyle, QLabel, QSlider)
+    QHBoxLayout, QVBoxLayout, QStyle, QLabel, QSlider, QComboBox)
 
 from PyQt5.QtGui import QPixmap, QImage
 
@@ -51,9 +51,18 @@ from PIL import Image       # Pillow library for image operations
 
 import ablolib as al
 
-# import cv2
+def ndarray2qpixmap(ndarray):
+    """ Convert ``np.ndarray`` into ``QPixmap`` """
+    # Some option like normalization etc. might appear here.
 
-
+    # Convert and normalize data
+    # data = np.uint8((img-img.min())/img.ptp()*255.0)
+    
+    data = np.uint8(ndarray)    # Convert data
+    h,w = data.shape
+    qimg = QImage(data.data,w,h,w,QImage.Format_Indexed8)
+    qpxm = QPixmap(qimg)
+    return qpxm
 
 class MyImageItem(pg.ImageItem):
     """
@@ -329,13 +338,82 @@ class PgView(QWidget):
         if self.closeSignal is not None:
             self.closeSignal.emit()
 
+class PixmapView(QWidget):
+    """
+    **Bases:** :class:`QWidget`
+
+    Separate window showing video output from the Basler camera. Typically
+    opened from :class:`BaslerGUI` which directly sets new image to
+    :attr:`img`. It employs ``pyqtgraph`` for imaging.
+
+    Args:
+        standalone (bool): Is this widget a standalone window (True) or part of
+            some other widget (False). Defaults to True.
+        closeSignal: This signal emits when this window is closed so, for
+            example, streaming can be automatically stopped by catching this signal.
+            Defaults to None.
+
+    Attributes:
+        img (:class:`MyImageItem`): New image (:class:`np.ndarray`) can be set
+            using command `img.setImage(my_img)`.
+    """
+
+    # TODO: Add mouse listener
+    # https://stackoverflow.com/questions/44169391/pyqt-qlabel-updating-a-pixmap-to-slow
+
+
+    def __init__(self,standalone=True,closeSignal=None):
+        super().__init__()
+
+        self.lbl = QLabel(self)
+        pixmap = QPixmap('test_img.jpeg')
+        self.lbl.setPixmap(pixmap)
+        self.lbl.setMinimumWidth(100)
+        self.lbl.setMinimumHeight(100)
+
+        hbox = QHBoxLayout()
+        hbox.setContentsMargins(0,0,0,0)
+        hbox.addStretch(1)
+        hbox.addWidget(self.lbl)
+        hbox.addStretch(1)
+        self.setLayout(hbox)
+
+        # Close signal emits when this widget is closed. This event is cought by
+        # the GUI which further proceeds what happens next. Makes sense in the
+        # standalone regime only.
+        self.closeSignal = closeSignal
+
+        # Set geometry of this widget when it is a standalone window
+        if standalone:
+            self.setGeometry(500,0,400,400)
+            self.setWindowTitle("Basler camera view")
+        self.show()
+
+    def resizeEvent(self,*_):
+        """ Reimplementation of `resizeEvent` method """
+        # TODO: Problem appears when resizing window after grabbing image.
+        pass
+        # w = self.frameGeometry().width()
+        # h = self.frameGeometry().height()
+        # self.lbl.resize(w,h)
+        # qpxm = self.lbl.pixmap()
+        # qpxm = qpxm.scaled(w,h,Qt.KeepAspectRatio)
+        # self.lbl.setPixmap(qpxm)
+
+    def closeEvent(self,*_):
+        """ Reimplementation of `closeEvent` method """
+        # close signal emits (if defined)
+        if self.closeSignal is not None:
+            self.closeSignal.emit()
+
 class Thread(QThread):
     """
     **Bases:** :class:`QThread`
 
     Object used to grab images from the **Basler** camera. It is optimized to be
     run in a separate thread. After successfull grabbing signal :attr:`newImg`
-    emits the image which is caught by :func:`Basler.setImg`.
+    emits the image which is caught by :func:`Basler.setImg`. All image
+    processing should be done here to ensure smooth running.
 
     Args:
         basler (:class:`Basler`): Pointer to camera instance
@@ -345,12 +423,14 @@ class Thread(QThread):
             exit while loop but stop grabbing)
 
     Attributes:
-        newImg (:class:`pyqtSignal`): Emits :class:`np.ndarray` after successfull
-            grabbing. 
+        newImg (:class:`pyqtSignal`): Emits :class:`QPixmap` after successfull
+            grabbing.
     """
-    newImg = pyqtSignal(np.ndarray)
+
+    newImg = pyqtSignal(QPixmap)
 
     def __init__(self,*args,basler=None,sigStop=None,sigPause=None):
+
         super().__init__(*args)
 
         self.Basler = basler
@@ -368,14 +448,17 @@ class Thread(QThread):
     def run(self):
         """ Reimplementation of :func:`run`. It grabs images calling
         :func:`Basler.grabImg` and emits :attr:`newImg`. """
+
         # self.Basler.grabVideoInit()
         while self.streaming:
             if not self.pause:
                 img = self.Basler.grabImg()
                 # img = self.Basler.grabVideo()
                 if img is not None:
-                    # img = cv2.resize(img,dsize=(800,632),interpolation=cv2.INTER_CUBIC)
-                    self.newImg.emit(img)
+                    
+                    qpxm = ndarray2qpixmap(img) # Convert data
+                    self.newImg.emit(qpxm)
+                    
         self.Basler.cam.StopGrabbing()
 
 class BaslerGUI(QWidget):
@@ -422,6 +505,9 @@ class BaslerGUI(QWidget):
         1.  Init Basler camera (:class:`Basler`)
         2.  Create GUI (buttons etc.)
     """
+
+    # TODO: Update slider values within init according to camera default
+    # $ settings.
 
     def __init__(self,parentCloseSignal=None,messageSignal=None):
         super().__init__()
@@ -534,8 +620,8 @@ class BaslerGUI(QWidget):
         self.__toggleConnection(self.Basler.connected)
 
     def __newViewWindow(self):
-        """ Init new :attr:`viewWindow` of :class:`PgView` class. """
-        viewWindow = PgView(closeSignal=self.signals.closeWindow)
+        """ Init new :attr:`viewWindow` of :class:`PixmapView` class. """
+        viewWindow = PixmapView(closeSignal=self.signals.closeWindow)
         # This window has to be shown and then potentially hidden. Error with
         # timers and different threads is otherwise given.
         viewWindow.show()
@@ -645,11 +731,12 @@ class BaslerGUI(QWidget):
 
             al.emitMsg(self.messageSignal,'Streaming started')
 
-    @pyqtSlot(np.ndarray)
+    @pyqtSlot(QPixmap)
     def setImage(self,image):
         """ Function is connected to :attr:`Thread.newImg` which emits when the
         :class:`Thread` grabs new image. This function also calculates `fps`
         which is displayed as a title of the :attr:`viewWindow`. """
+
         nowT = pg.ptime.time()
         dt = nowT - self.lastT
         self.lastT = nowT
@@ -660,7 +747,12 @@ class BaslerGUI(QWidget):
             self.fps = self.fps * (1-s) + (1.0/dt) * s
         self.viewWindow.setWindowTitle(
             "Basler camera view (%0.2f fps)"%self.fps)
-        self.viewWindow.img.setImage(image)
+
+        w = self.viewWindow.frameGeometry().width()
+        h = self.viewWindow.frameGeometry().height()
+        image = image.scaled(w,h,Qt.KeepAspectRatio)
+        self.viewWindow.lbl.setPixmap(image)
+        # time.sleep(0.1)
 
     def stopStream(self):
         """ Stop streaming. :attr:`signals_sig1` emits so :class:`Thread` knows
@@ -679,15 +771,22 @@ class BaslerGUI(QWidget):
         # First, show window if not visible
         if not self.viewWindow.isVisible():
             self.viewWindow.show()
-        img = self.Basler.grabImg()             # Grab image
-        self.viewWindow.img.setImage(img)
+
+        qpxm = ndarray2qpixmap(self.Basler.grabImg())
+        
+        w = self.viewWindow.frameGeometry().width()
+        h = self.viewWindow.frameGeometry().height()
+        qpxm = qpxm.scaled(w,h,Qt.KeepAspectRatio)
+        self.viewWindow.lbl.setPixmap(qpxm)
 
     def saveImg(self):
         """ Grab new image and save """
         if self.streaming:
             self.signals.sig2.emit()    # Pause streaming
             time.sleep(0.1)
+        # TODO: Apply save settings (size) here
         img = Image.fromarray(self.Basler.grabImg())    # Pillow library used
+        # TODO: Add exif info
         img.save('test.png')
         if self.streaming:
             self.signals.sig2.emit()    # Continue streaming
