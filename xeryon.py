@@ -130,7 +130,7 @@ class Motor():
     """
 
     def __init__(self,axis_letter='',closeSignal=None,units=xe.Units.mm,
-                 speed=100,stepSize=1):
+                 speed=10,stepSize=1):
 
         self.connected = False      # Connection status
         self.indexFound = False     # Is index found? (not needed?)
@@ -1105,7 +1105,7 @@ class MoveRGUI(QWidget):
             sign = -1
         elif objectName[0] == 'R':
             sign = +1
-        self.motor.step(sign * self.motor.stepSize.get())      
+        self.motor.step(sign * self.motor.stepSize.get())
 
     def __qdialChange(self,value):
         """ Called when qdial value is changed -> set motor DPOS"""
@@ -1477,9 +1477,13 @@ class MenuActionSettingsFile(QAction):
 
     QAction to edit *Xeryon settings file* using embedded editor.
     Import this QAction into menu.
+
+    Args:
+        parentCloseSignal: Signal is connected to :func:`parentClose`
+            which closes the editor if opened.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, parentCloseSignal=None):
         super().__init__('&Edit Xeryon settings...',parent)
 
         self.setStatusTip('Edit Xeryon settings file')
@@ -1488,11 +1492,18 @@ class MenuActionSettingsFile(QAction):
 
         self.editor = None
 
+        if parentCloseSignal is not None:
+            parentCloseSignal.connect(self.parentClose)
+
     def edit(self):
         """ Action connected to the QAction - open and edit Xeryon file """
         self.editor = TextEditorGUI()
         self.editor.show()
         self.editor.OpenFile(xe.SETTINGS_FILENAME)
+
+    def parentClose(self):
+        try:    self.editor.close()
+        except: pass
 
 class XeryonGUI(QWidget):
     """
@@ -1562,7 +1573,7 @@ class XeryonMainWindow(QMainWindow):
             closeSignal=self.signals.closeParent)
         
         self.motorZ = Motor(
-            axis_letter='Z',
+            axis_letter='Z3',
             closeSignal=self.signals.closeParent)
 
         self.motorR = Motor(
@@ -1570,7 +1581,7 @@ class XeryonMainWindow(QMainWindow):
             closeSignal=self.signals.closeParent,
             units=xe.Units.deg,
             stepSize=10,
-            speed=500)
+            speed=100)
 
         self.xeryonGUI = XeryonGUI(
             parentCloseSignal=self.signals.closeParent,
@@ -1590,7 +1601,8 @@ class XeryonMainWindow(QMainWindow):
 
         # Create menubar -------------------------------------------------------
 
-        settingsAct = MenuActionSettingsFile(self)
+        settingsAct = MenuActionSettingsFile(self,
+            parentCloseSignal=self.signals.closeParent)
 
         menubar = self.menuBar()
         settingsMenu = menubar.addMenu('&Settings')

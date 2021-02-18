@@ -31,6 +31,7 @@ Todo:
 # $ [ ] Define sample dimensions -> Show sample on XY widget, define sample coords
 # TODO =========================================================================
 
+import os
 import sys
 
 from datetime import datetime
@@ -52,6 +53,7 @@ import qtawesome as qta     # qta-browser
 
 import ablolib as al
 import xeryon
+
 
 class MicGUI(QWidget):
     """ 
@@ -250,7 +252,8 @@ class MicMainWindow(QMainWindow):
         logAct.triggered.connect(self.showLogFile)
 
         # Settings -> Xeryon
-        xesAct = xeryon.MenuActionSettingsFile(self)
+        xesAct = xeryon.MenuActionSettingsFile(self,
+            parentCloseSignal=self.signals.closeParent)
 
         # Compose menu
         menubar = self.menuBar()
@@ -327,7 +330,8 @@ def main():
     app.setStyle('Fusion')
 
     # Set style which is defined in a separate file
-    styleFile = "AbloGUI_pyqt/ablo.css"
+    print(os.path.join(os.getcwd(), "AbloMIC", "ablo.css")) 
+    styleFile = os.path.join(os.getcwd(), "AbloCAM", "ablo.css")
     with open(styleFile,'r') as fh:
         app.setStyleSheet(fh.read())
 
