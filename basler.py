@@ -543,7 +543,7 @@ class SaveSettings(QMainWindow):
         self.setWindowTitle('Save settings')
         self.show()
 
-        self.__selectDirectory(path='asdfklsadjfklajwef oajfoifjaa;ewjf wea;fjwefwea')
+        self.__selectDirectory(path=self.path)
         self.fullname = self.composeFullname()
 
     def composeFilename(self):

@@ -31,6 +31,8 @@ Todo:
 # $ [ ] Define sample dimensions -> Show sample on XY widget, define sample coords
 # TODO =========================================================================
 
+# TODO: git status -> check changes and commit!
+
 import os
 import sys
 
