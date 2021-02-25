@@ -28,6 +28,11 @@ A typical usage of this module contains following steps:
 # @ [x] Rotational stage works with old tkinter script but not here :/
 # TODO -------------------------------------------------------------------------
 
+# TODO: Run this script, connect motor and check output:
+# $ this is from Xeryon.py, line 707
+# $ instead of printing these values, signals (XeSignals) shoud be emitted
+# $ check documentation what does STAT tag mean
+
 import sys
 import time
 import numpy as np
@@ -180,35 +185,8 @@ class Motor():
 
             self.stepSize = al.DynVar(stepSize)
 
-            # TODO: Serial numbers should be read from config file
-            # TODO: Stage should be defined in the config file and be returned from
-            # TODO: `readConfig()` function.
-            if axis_letter == "X":
-                serial_number = "7583835373835180D020"
-                stage = xe.Stage.XLS_1250
-            elif axis_letter == "Y":
-                serial_number = "75838353738351213130"
-                stage = xe.Stage.XLS_1250
-            elif axis_letter == "Z":
-                serial_number = "75838353738351319090"
-                stage = xe.Stage.XLS_1250
-            elif axis_letter == "Z3":
-                serial_number = "9593332343335101A020"
-                stage = xe.Stage.XLS_1250_3N
-            elif axis_letter == "R":
-                serial_number = "95933323433351212070"
-                stage = xe.Stage.XRTU_30_109
-            else:
-                serial_number = None
-                stage = None
-            
-            serial = get_serial_port(serial_number)
+            self.__getSerial()
 
-            if serial is None:
-                al.printE(f"Xeryon motor '{axis_letter}' not connected!")
-            else:
-                self.serial = serial
-                self.stage = stage
         else:
             # Just initialization of a motor instance
             pass
@@ -217,10 +195,9 @@ class Motor():
         """ Connect Xeryon motor """
 
         if self.serial is None:
-            al.printE(f'Xeryon motor {self.axis_letter}: Serial port is not '
-                'defined because motor with provided serial number was not '
-                'found! Connection failed.')
-            return False
+            self.__getSerial()
+            if self.serial is None:
+                return False
 
         # Connect Xeryon controller
         self.controller = xe.Xeryon(self.serial,baudrate)
@@ -400,6 +377,39 @@ class Motor():
         else:
             self.axis.setDPOS(self.DPOS.get())  # Write position to encoder
 
+    def __getSerial(self):
+
+        # TODO: Serial numbers should be read from config file
+        # TODO: Stage should be defined in the config file and be returned from
+        # TODO: `readConfig()` function.
+        if self.axis_letter == "X":
+            serial_number = "7583835373835180D020"
+            stage = xe.Stage.XLS_1250
+        elif self.axis_letter == "Y":
+            serial_number = "75838353738351213130"
+            stage = xe.Stage.XLS_1250
+        elif self.axis_letter == "Z":
+            serial_number = "75838353738351319090"
+            stage = xe.Stage.XLS_1250
+        elif self.axis_letter == "Z3":
+            serial_number = "9593332343335101A020"
+            stage = xe.Stage.XLS_1250_3N
+        elif self.axis_letter == "R":
+            self.units = xe.Units.deg
+            serial_number = "95933323433351212070"
+            stage = xe.Stage.XRTU_30_109
+        else:
+            serial_number = None
+            stage = None
+        
+        serial = get_serial_port(serial_number)
+
+        if serial is None:
+            al.printE(f"Xeryon motor '{self.axis_letter}' not connected!")
+        else:
+            self.serial = serial
+            self.stage = stage
+
 class HoverButton(QPushButton):
     """
     **Bases:** :class:`QWidget`
@@ -425,7 +435,7 @@ class StatusGUI(QWidget):
     """
     **Bases:** :class:`QWidget`
 
-    Interactive status of Xeryon stage.
+    Interactive status of Xeryon stage - LEDs.
 
     Args:
         motor (:class:`Motor`): Pointer to initialized xeryon motor. It **must**
@@ -1573,13 +1583,12 @@ class XeryonMainWindow(QMainWindow):
             closeSignal=self.signals.closeParent)
         
         self.motorZ = Motor(
-            axis_letter='Z3',
+            axis_letter='Z',
             closeSignal=self.signals.closeParent)
 
         self.motorR = Motor(
             axis_letter='R',
             closeSignal=self.signals.closeParent,
-            units=xe.Units.deg,
             stepSize=10,
             speed=100)
 

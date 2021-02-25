@@ -31,8 +31,6 @@ Todo:
 # $ [ ] Define sample dimensions -> Show sample on XY widget, define sample coords
 # TODO =========================================================================
 
-# TODO: git status -> check changes and commit!
-
 import os
 import sys
 
@@ -91,15 +89,6 @@ class MicGUI(QWidget):
 
         # Build GUI ============================================================
 
-        # Structure: self -> mainVBox -> GB -> vbox -> Basler
-
-        # MicGUI
-        # └── mainVBox
-        #     ├─── baslerGB
-        #     │    ├─── box A
-        #     │    └─── box B
-        #     └─── xeryonGB
-
         # Basler camera --------------------------------------------------------
         self.basler = BaslerGUI(
             parentCloseSignal=parentCloseSignal,
@@ -117,7 +106,7 @@ class MicGUI(QWidget):
        
         # Init Xeryon motor X (motor is connected below)
         self.motorX = xeryon.Motor(
-            axis_letter='Z3',
+            axis_letter='X',
             closeSignal = parentCloseSignal)
 
         # Init Xeryon motor Y (motor is connected below)
@@ -139,19 +128,26 @@ class MicGUI(QWidget):
 
         # Z stage & Navitar control --------------------------------------------
 
+        # Init Xeryon motor Z (motor is connected below)
+        self.motorZ = xeryon.Motor(
+            axis_letter='Z3',
+            closeSignal = parentCloseSignal)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(xeryon.MoveVGUI(motor=self.motorZ))
+        zGB = QGroupBox('Z movements')
+        zGB.setLayout(vbox)
+
         # Rotational stage -----------------------------------------------------
 
         self.motorR = xeryon.Motor(
             axis_letter = 'R',
-            closeSignal = parentCloseSignal)
-
-        qdial = QDial()
-        qdial.setWrapping(True)
-        qdial.setValue(50)
-        # qdial.valueChanged.connect(print)
+            closeSignal = parentCloseSignal,
+            stepSize=10,
+            speed=100)
 
         vbox = QVBoxLayout()
-        vbox.addWidget(qdial)
+        vbox.addWidget(xeryon.MoveRGUI(motor=self.motorR))
 
         rotateGB = QGroupBox('Rotational stage')
         rotateGB.setLayout(vbox)
@@ -160,6 +156,8 @@ class MicGUI(QWidget):
         vbox = QVBoxLayout()
         vbox.addWidget(xeryon.StatusGUI(motor=self.motorX))
         vbox.addWidget(xeryon.StatusGUI(motor=self.motorY))
+        vbox.addWidget(xeryon.StatusGUI(motor=self.motorZ))
+        vbox.addWidget(xeryon.StatusGUI(motor=self.motorR))
 
         xeryonGB = QGroupBox('Xeryon motors')
         xeryonGB.setLayout(vbox)
@@ -169,6 +167,7 @@ class MicGUI(QWidget):
         mainVBox = QVBoxLayout()
         mainVBox.addWidget(baslerGB)
         mainVBox.addWidget(xyGB)
+        mainVBox.addWidget(zGB)
         mainVBox.addWidget(rotateGB)
         mainVBox.addWidget(xeryonGB)
         mainVBox.addStretch(1)
@@ -179,7 +178,9 @@ class MicGUI(QWidget):
 
         self.motorX.connect()
         self.motorY.connect()
-        self.xystage.update()
+        self.motorZ.connect()
+        self.motorR.connect()
+        # self.xystage.update()
 
     def closeEvent(self,*_):
         print("MicGUI::closeEvent")
@@ -332,7 +333,7 @@ def main():
     app.setStyle('Fusion')
 
     # Set style which is defined in a separate file
-    print(os.path.join(os.getcwd(), "AbloMIC", "ablo.css")) 
+    # print(os.path.join(os.getcwd(), "AbloMIC", "ablo.css")) 
     styleFile = os.path.join(os.getcwd(), "AbloCAM", "ablo.css")
     with open(styleFile,'r') as fh:
         app.setStyleSheet(fh.read())

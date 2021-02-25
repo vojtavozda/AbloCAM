@@ -40,7 +40,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
     QHBoxLayout, QVBoxLayout, QStyle, QLabel, QSlider, QComboBox, QGridLayout,
     QLineEdit, QCheckBox, QFileDialog, QMessageBox)
 
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QIntValidator
 
 import pyqtgraph as pg
 
@@ -149,7 +149,7 @@ class Basler():
         print('Connecting Basler camera:',end='')
 
         # Attempt to connect several times
-        for _ in range(10):
+        for _ in range(2):
             try:
                 # Connect camera
                 self.cam = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
@@ -473,17 +473,21 @@ class SaveSettings(QMainWindow):
         self.counter = 0
         self.filename_core = 'image'
         self.ext = '.png'
-        self.filename = self.composeFilename()
+        self.filename = None    # (initiated below)
+        self.fullname = None    # (initiated below)
 
         grid = QGridLayout()
+
+        self.signals = al.Signals()
 
         lblDir = QLabel('Directory:')
         self.btnDir = QPushButton('...')
         self.btnDir.clicked.connect(self.__selectDirectory)
 
         lblName = QLabel('File name:')
-        qleName = QLineEdit()
-        qleName.setText(self.filename_core)
+        self.qleName = QLineEdit()
+        self.qleName.setText(self.filename_core)
+        self.qleName.textChanged.connect(self.__qleNameChanged)
 
         lblAInc = QLabel('Auto increment:')
         chbAInc = QCheckBox()
@@ -492,6 +496,8 @@ class SaveSettings(QMainWindow):
         lblNext = QLabel('Next value:')
         self.qleVal = QLineEdit()
         self.qleVal.setText(str(self.counter))
+        self.qleVal.textChanged.connect(self.__qleValChanged)
+        self.qleVal.setValidator(QIntValidator())
         hboxAInc = QHBoxLayout()
         hboxAInc.addWidget(chbAInc)
         hboxAInc.addWidget(lblNext)
@@ -499,9 +505,10 @@ class SaveSettings(QMainWindow):
 
         lblExt = QLabel('Extension:')
         self.cmbExt = QComboBox()
-        extensions = ['.jpg','.png']
+        extensions = ['.jpg','.png','.tiff']
         self.cmbExt.addItems(extensions)
         self.cmbExt.setCurrentIndex(extensions.index(self.ext))
+        self.cmbExt.activated[str].connect(self.__cmbExtChanged)
 
         lblFileName = QLabel('Full name:')
         self.qleFileName = QLineEdit()
@@ -515,7 +522,7 @@ class SaveSettings(QMainWindow):
         grid.addWidget(lblAInc,1,0)
         grid.addLayout(hboxAInc,1,1)
         grid.addWidget(lblName,2,0)
-        grid.addWidget(qleName,2,1)
+        grid.addWidget(self.qleName,2,1)
         grid.addWidget(lblExt,3,0)
         grid.addWidget(self.cmbExt,3,1)
         grid.addWidget(lblFileName,4,0)
@@ -523,11 +530,13 @@ class SaveSettings(QMainWindow):
         grid.addWidget(lblRes,5,0)
         grid.addWidget(lblrrr,5,1)
 
-        btnDone = QPushButton('Done')
-        btnDone.setIcon(al.standardIcon('SP_DialogApplyButton'))
+        self.btnDone = QPushButton('Done')
+        self.btnDone.setIcon(al.standardIcon('SP_DialogApplyButton'))
+        self.btnDone.setObjectName('btn_done')
+        self.btnDone.clicked.connect(self.__btnClicked)
         hbox = QHBoxLayout()
         hbox.addStretch()
-        hbox.addWidget(btnDone)
+        hbox.addWidget(self.btnDone)
 
         vbox = QVBoxLayout()
         vbox.addLayout(grid)
@@ -544,28 +553,49 @@ class SaveSettings(QMainWindow):
         self.show()
 
         self.__selectDirectory(path=self.path)
-        self.fullname = self.composeFullname()
 
-    def composeFilename(self):
-        if self.autoInc:
-            # TODO: Add leading zeros
-            filename = str(self.filename_core)+'_'+str(self.counter)+str(self.ext)
-        else:
-            filename = str(self.filename_core)+str(self.ext)
-        return filename
+        self.composeFilenames()
 
-    def composeFullname(self):
+    def composeFilenames(self):
+        """ Compose and set `filename` and `fullname` """
         # TODO: This function should be called after every change of the name
-        self.filename = self.composeFilename()
-        # TODO: Signal should be emitted here and filename set at parent's button
+
+        # Compose filename
+        if self.autoInc:
+            self.filename = (
+                str(self.filename_core) + '_' +
+                str(self.counter).zfill(5) + 
+                str(self.ext))
+        else:
+            self.filename = str(self.filename_core)+str(self.ext)
+
+        # Display `filename` in the field
         self.qleFileName.setText(self.filename)
 
-        return self.path + '/' + self.filename
+        # TODO: Signal should be emitted here and filename set at parent's
+        # $ button
+
+        # Compose fullname
+        self.fullname = os.path.join(self.path,self.filename)
+
+        self.signals.message.emit(self.filename)
+
+    def increaseCounter(self):
+        if self.autoInc:
+            self.counter = int(self.counter)+1
+            self.qleVal.setText(str(self.counter))
+            # self.composeFilenames()
+
+    def __btnClicked(self):
+        sender = self.sender()
+        if sender.objectName() == 'btn_done':
+            self.composeFilenames() # emit signal
+            self.hide()
 
     def __toggleAutoInc(self,value):
         self.autoInc = bool(value)
         self.qleVal.setEnabled(self.autoInc)
-        self.composeFullname()
+        self.composeFilenames()
 
     def __selectDirectory(self,*args,path=None):
 
@@ -579,7 +609,19 @@ class SaveSettings(QMainWindow):
                 btntxt = '...'+btntxt[-30:]
             self.btnDir.setText(btntxt)
             self.btnDir.setToolTip(self.path)
+            self.composeFilenames()
 
+    def __qleValChanged(self,value):
+        self.counter = value
+        self.composeFilenames()
+
+    def __qleNameChanged(self,filename_core):
+        self.filename_core = filename_core
+        self.composeFilenames()
+
+    def __cmbExtChanged(self,ext):
+        self.ext = ext
+        self.composeFilenames()
 
 class BaslerGUI(QWidget):
     """
@@ -647,6 +689,7 @@ class BaslerGUI(QWidget):
 
         self.saveSettings = SaveSettings()
         self.saveSettings.hide()
+        self.saveSettings.signals.message.connect(self.__newFilenameSigCallback)
 
         # Initiate Basler camera -----------------------------------------------
         self.Basler = Basler(
@@ -916,15 +959,44 @@ class BaslerGUI(QWidget):
 
     def saveImg(self):
         """ Grab new image and save """
+
+        # Pause streaming
         if self.streaming:
-            self.signals.sig2.emit()    # Pause streaming
+            self.signals.sig2.emit()
             time.sleep(0.1)
         # TODO: Apply save settings (size) here
-        img = Image.fromarray(self.Basler.grabImg())    # Pillow library used
+
+        # Change resolution temporarily to 100%
+        _res = self.Basler.resolution.get()
+        self.Basler.resolution.set(100)
+
+        # Grab and save image (pillow library used)
         # TODO: Add exif info
-        img.save('test.png')
+
+        # data = np.random.normal(size=(100,100))*255
+        data = self.Basler.grabImg()    # Grab image
+        data = data.astype(np.uint8)    # Round floats to ints in (0,255)
+        img = Image.fromarray(data)     # Format numpy array to image format
+
+        # img = img.convert('L')    # Convert to grayscale image
+        # img = img.convert('RGB')    # Convert to coloured image
+        
+        img.save(self.saveSettings.fullname)
+
+        # Update counter
+        self.saveSettings.increaseCounter()
+
+        # Restore resolution
+        self.Basler.resolution.set(_res)
+
+        # Continue streaming
         if self.streaming:
             self.signals.sig2.emit()    # Continue streaming
+
+    def __newFilenameSigCallback(self,filename):
+        if len(filename) > 20:
+            filename = '...'+filename[-20:]
+        self.btnSaveImg.setText(filename)
 
     def __viewWindowClosed(self):
         """ Stop streaming when closing view window """
@@ -934,6 +1006,7 @@ class BaslerGUI(QWidget):
         print('BaslerGUI::__parentClose')
         self.stopStream()
         self.viewWindow.hide()
+        self.saveSettings.hide()
         self.Basler.disconnect()
 
 class BaslerMainWindow(QMainWindow):
@@ -978,8 +1051,8 @@ def main():
     :class:`BaslerMainWindow` and ensures clean exit.
     """
     app = QApplication(sys.argv)
-    # handle = BaslerMainWindow()
-    handle = SaveSettings()
+    handle = BaslerMainWindow()
+    # handle = SaveSettings()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
